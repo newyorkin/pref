@@ -1,0 +1,16 @@
+{
+  "name": "pref",
+  "private": true,
+  "packageManager": "pnpm@10.18.3",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel --filter @pref/server --filter @pref/web run dev",
+    "test": "pnpm --recursive --if-present test"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.2"
+  }
+}

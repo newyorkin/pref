@@ -1,0 +1,15 @@
+services:
+  pref:
+    build: .
+    ports:
+      - "3001:3001"
+    environment:
+      HOST: 0.0.0.0
+      PORT: 3001
+      DATABASE_PATH: /data/pref.sqlite
+      STATIC_DIR: /app/packages/web/dist
+    volumes:
+      - pref-data:/data
+
+volumes:
+  pref-data:

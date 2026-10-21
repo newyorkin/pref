@@ -1,0 +1,970 @@
+.game-screen {
+  --paper: #f7f3ea;
+  --paper-raised: #fffdf8;
+  --ink: #1e1a16;
+  --muted: #6b6258;
+  --gold: #c4a574;
+  --green: #1b4d38;
+  --suit-red: #9d3a3a;
+  box-sizing: border-box;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 1.1rem 1.15rem 8.2rem;
+  color: #f3ecdf;
+  color-scheme: dark;
+  background-color: #10281f;
+  background-image:
+    radial-gradient(rgba(255, 255, 255, 0.045) 0.7px, transparent 0.7px),
+    radial-gradient(ellipse at 50% 42%, #1e5640 0%, #14382b 48%, #0b211a 100%);
+  background-size: 6px 6px, 100% 100%;
+  font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+}
+
+.game-screen *,
+.game-screen *::before,
+.game-screen *::after {
+  box-sizing: border-box;
+}
+
+body:has(.game-screen) {
+  margin: 0;
+}
+
+.finish-banner {
+  position: fixed;
+  z-index: 30;
+  left: 50%;
+  top: 42%;
+  width: min(28rem, calc(100vw - 2rem));
+  transform: translate(-50%, -50%);
+  padding: 1.15rem 1.2rem 1.2rem;
+  border: 1px solid rgba(196, 165, 116, 0.75);
+  border-radius: 0.45rem;
+  background: var(--paper);
+  color: var(--ink);
+  text-align: center;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+}
+
+.finish-banner p {
+  margin: 0 0 0.95rem;
+  font: 700 1.2rem/1.35 "Iowan Old Style", Palatino, Georgia, serif;
+}
+
+.finish-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.finish-actions button {
+  border: 0;
+  border-radius: 0.48rem;
+  background: var(--green);
+  color: var(--paper);
+  padding: 0.58rem 0.9rem;
+  font: 700 0.9rem/1.2 "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+  cursor: pointer;
+}
+
+.game-status {
+  margin: auto;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-size: 0.95rem;
+}
+
+.game-top {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+  padding-right: 5.2rem;
+}
+
+.game-declarer {
+  margin: 0.15rem 0 0;
+  color: var(--gold);
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.game-title {
+  margin: 0;
+  font-family: "Iowan Old Style", Palatino, Georgia, serif;
+  font-size: 2rem;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.game-meta,
+.game-deal,
+.opponent-name,
+.opponent-meta,
+.trick-count {
+  margin: 0;
+}
+
+.game-meta {
+  margin-top: 0.35rem;
+  color: #e7dcc6;
+  font-size: 0.86rem;
+}
+
+.game-deal {
+  color: var(--gold);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.score-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.score-chip {
+  display: flex;
+  gap: 0.7rem;
+  align-items: baseline;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid rgba(196, 165, 116, 0.4);
+  border-radius: 0.7rem;
+  background: rgba(247, 243, 234, 0.1);
+  color: #f3ecdf;
+  font-size: 0.88rem;
+}
+
+.score-you {
+  background: var(--paper);
+  color: var(--ink);
+  border-color: transparent;
+}
+
+.score-who {
+  font-weight: 700;
+}
+
+.opponents {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.opponent {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  min-width: 6rem;
+}
+
+.opponent-name {
+  font-weight: 700;
+}
+
+.opponent-meta {
+  color: #e7dcc6;
+  font-size: 0.84rem;
+}
+
+.backs {
+  display: flex;
+  min-height: 3.4rem;
+}
+
+.card-back {
+  width: 2.35rem;
+  height: 3.35rem;
+  border-radius: 0.35rem;
+  background-color: #1b4d38;
+  background-image: repeating-linear-gradient(
+    135deg,
+    rgba(240, 226, 196, 0.2) 0 2px,
+    transparent 2px 7px
+  );
+  box-shadow:
+    inset 0 0 0 2px rgba(240, 226, 196, 0.5),
+    0 6px 12px rgba(0, 0, 0, 0.28);
+}
+
+.backs .card-back + .card-back {
+  margin-left: -1.55rem;
+}
+
+.opponent-open {
+  align-items: flex-start;
+  max-width: min(24rem, 48vw);
+}
+
+.opponent-open-right {
+  align-items: flex-end;
+  padding-right: 5.2rem;
+}
+
+.opponent-cards {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+}
+
+.open-suit {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.open-suit-mark {
+  margin-bottom: 0.2rem;
+  font-size: 1.05rem;
+  line-height: 1;
+}
+
+.open-suit .pc {
+  width: 3.4rem;
+  height: 4.9rem;
+  border-radius: 0.42rem;
+}
+
+.open-suit .pc + .pc {
+  margin-top: -2.55rem;
+}
+
+.open-suit .pc-corner {
+  font-size: 0.84rem;
+}
+
+.open-suit .pc-suit {
+  font-size: 1.45rem;
+}
+
+.open-suit button.pc:hover,
+.open-suit button.pc:focus-visible {
+  z-index: 4;
+  transform: translateY(-0.55rem);
+}
+
+.game-screen-auction {
+  height: 100dvh;
+  overflow: hidden;
+  gap: 0.35rem;
+  padding: 0.45rem 1.15rem 6rem;
+}
+
+.game-screen-auction .opponents {
+  padding-right: 5.4rem;
+}
+
+.game-screen-auction .auction {
+  margin-top: 0.2rem;
+}
+
+.game-screen-auction .bid-call {
+  margin: 0.2rem 0 0.45rem;
+  font-size: 1.7rem;
+}
+
+.game-screen-auction .bid-round,
+.game-screen-auction .bid-wait {
+  margin: 0 0 0.4rem;
+}
+
+.game-screen-auction .bid-grid {
+  gap: 0.32rem;
+}
+
+.game-screen-auction .bid-cell,
+.game-screen-auction .bid-slot,
+.game-screen-auction .bid-misere,
+.game-screen-auction .bid-pass {
+  height: 2.25rem;
+}
+
+.game-screen-auction .bid-pass {
+  margin-top: 0.45rem;
+}
+
+.game-screen-auction .game-hand {
+  min-height: 6.2rem;
+  flex-shrink: 0;
+  padding-top: 0;
+}
+
+.auction {
+  width: min(32rem, 100%);
+  margin: 0 auto;
+}
+
+.bid-turn {
+  margin: 0;
+  text-align: center;
+  color: var(--gold);
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.bid-turn-you {
+  color: #10281f;
+  background: var(--gold);
+  border-radius: 0.45rem;
+  padding: 0.35rem 0.5rem;
+}
+
+.bid-wait {
+  margin: 0 0 0.7rem;
+  text-align: center;
+  color: #f3ecdf;
+  font-size: 1rem;
+}
+
+.bid-call {
+  margin: 0.2rem 0 0.75rem;
+  text-align: center;
+  font-family: "Iowan Old Style", Palatino, Georgia, serif;
+  font-size: 1.85rem;
+  line-height: 1.1;
+}
+
+.bid-call span {
+  font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+  font-size: 0.95rem;
+  color: #e7dcc6;
+}
+
+.bid-round {
+  margin: 0 0 0.7rem;
+  text-align: center;
+  color: #e7dcc6;
+  font-size: 0.84rem;
+}
+
+.bid-grid {
+  display: grid;
+  grid-template-columns: 2.4rem repeat(5, minmax(0, 1fr));
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.bid-head,
+.bid-level {
+  text-align: center;
+  font-weight: 700;
+}
+
+.bid-head {
+  font-size: 1.05rem;
+}
+
+.bid-red {
+  color: #e07a72;
+}
+
+.bid-level {
+  color: #e7dcc6;
+  font-size: 0.92rem;
+}
+
+.bid-cell,
+.bid-slot,
+.bid-misere,
+.bid-pass {
+  height: 2.4rem;
+  border-radius: 0.48rem;
+}
+
+.bid-cell,
+.bid-pass {
+  border: 0;
+  cursor: pointer;
+  font: 700 1rem/1 "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+}
+
+.bid-cell {
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    0 6px 12px rgba(0, 0, 0, 0.18);
+}
+
+.bid-cell:hover {
+  background: var(--paper-raised);
+}
+
+.bid-cell.bid-red {
+  color: var(--suit-red);
+}
+
+.bid-slot,
+.bid-misere {
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(243, 236, 223, 0.35);
+}
+
+.bid-current {
+  background: rgba(196, 165, 116, 0.2);
+  color: #f0e2c4;
+  box-shadow: inset 0 0 0 1px rgba(240, 226, 196, 0.75);
+}
+
+.bid-misere,
+.bid-misere-btn {
+  grid-column: 1 / -1;
+}
+
+.bid-pass {
+  width: 100%;
+  margin-top: 0.7rem;
+  background: transparent;
+  color: #f6f1e6;
+  border: 1px solid rgba(240, 226, 196, 0.55);
+}
+
+.bid-pass:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.game-hand {
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  margin-top: auto;
+  min-height: 7.2rem;
+  padding: 0.4rem 0 0.2rem;
+}
+
+.pc {
+  position: relative;
+  width: 4.35rem;
+  height: 6.2rem;
+  flex: 0 0 auto;
+  border-radius: 0.48rem;
+  background: var(--paper-raised);
+  color: var(--ink);
+  border: 1px solid rgba(196, 165, 116, 0.55);
+  box-shadow: 0 10px 18px rgba(0, 0, 0, 0.28);
+}
+
+button.pc {
+  padding: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pc-trump {
+  box-shadow:
+    0 0 0 2px var(--gold),
+    0 10px 18px rgba(0, 0, 0, 0.28);
+}
+
+.pc-selected {
+  outline: 3px solid #f0e2c4;
+  outline-offset: 2px;
+  transform: translateY(-0.75rem);
+}
+
+.pc-talon::after {
+  content: "прикуп";
+  position: absolute;
+  right: 0.25rem;
+  bottom: 0.25rem;
+  color: var(--green);
+  font-size: 0.55rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.discard-pile {
+  position: fixed;
+  left: 0.75rem;
+  bottom: 0.4rem;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+}
+
+
+.discard-pile .trick {
+  justify-content: flex-start;
+}
+
+.contract-banner {
+  margin: 0;
+  text-align: center;
+  color: var(--gold);
+  font-family: "Iowan Old Style", Palatino, Georgia, serif;
+  font-size: 1.7rem;
+}
+
+.game-hand .pc + .pc {
+  margin-left: -1.45rem;
+}
+
+.game-hand .pc + .pc.pc-break {
+  margin-left: 0.7rem;
+}
+
+.pc-red {
+  color: var(--suit-red);
+}
+
+.pc-corner {
+  position: absolute;
+  top: 0.32rem;
+  left: 0.38rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-weight: 700;
+  font-size: 0.92rem;
+  line-height: 1;
+}
+
+.pc-suit {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 1.7rem;
+}
+
+.prikup {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.prikup-row {
+  display: flex;
+  justify-content: center;
+  gap: 0.7rem;
+}
+
+.prikup-back {
+  width: 3.4rem;
+  height: 4.8rem;
+  padding: 0;
+  border: 0;
+  cursor: pointer;
+}
+
+span.prikup-back {
+  cursor: default;
+}
+
+.layout-dialog {
+  width: min(52rem, 100%);
+  max-height: calc(100dvh - 2.4rem);
+  overflow: auto;
+  padding: 0.8rem 0.9rem 1rem;
+  border: 1px solid rgba(196, 165, 116, 0.7);
+  border-radius: 0.4rem;
+  background: #f7f3ea;
+  color: #1e1a16;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+}
+
+.layout-board {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.layout-board h2 {
+  margin: 0 0 0.35rem;
+  font-family: "Iowan Old Style", Palatino, Georgia, serif;
+  font-size: 1.15rem;
+}
+
+.layout-hand {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.layout-hand .pc {
+  width: 2.7rem;
+  height: 3.8rem;
+}
+
+.trick {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.trick .pc {
+  width: 3.4rem;
+  height: 4.8rem;
+}
+
+.discard-pile .trick .pc {
+  width: 2.45rem;
+  height: 3.45rem;
+}
+
+.trick-back {
+  width: 3.4rem;
+  height: 4.8rem;
+}
+
+.trick-count {
+  color: #e7dcc6;
+  font-size: 0.86rem;
+}
+
+.trick-dock {
+  position: fixed;
+  right: 0.75rem;
+  bottom: 0.35rem;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  width: min(16.5rem, calc(100vw - 12rem));
+  pointer-events: none;
+}
+
+.seat-triangle {
+  position: relative;
+  width: 100%;
+  height: 5.7rem;
+}
+
+.seat-triangle svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.seat-triangle-shape {
+  fill: rgba(8, 24, 18, 0.92);
+  stroke: var(--gold);
+  stroke-width: 2.5;
+}
+
+.seat-arrow line {
+  stroke: var(--gold);
+  stroke-width: 3.5;
+  stroke-linecap: round;
+}
+
+.seat-arrow polygon {
+  fill: var(--gold);
+}
+
+.seat-corner {
+  position: absolute;
+  margin: 0;
+  max-width: 6.4rem;
+  color: #f3ecdf;
+  font-size: 0.74rem;
+  line-height: 1.1;
+  pointer-events: none;
+}
+
+.seat-corner span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.seat-corner strong {
+  display: block;
+  font-size: 1.15rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.seat-corner-left {
+  top: 0.15rem;
+  left: 0.35rem;
+  text-align: left;
+}
+
+.seat-corner-right {
+  top: 0.15rem;
+  right: 0.35rem;
+  text-align: right;
+}
+
+.seat-corner-me {
+  bottom: 0.15rem;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+}
+
+.seat-corner-turn {
+  color: var(--gold);
+}
+
+.bullet-open,
+.bullet-close {
+  border: 0;
+  border-radius: 0.48rem;
+  background: var(--paper);
+  color: var(--ink);
+  font: 700 0.88rem/1.2 "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+  cursor: pointer;
+}
+
+.corner-tools {
+  position: fixed;
+  left: 0.75rem;
+  bottom: 0.75rem;
+  z-index: 4;
+  display: flex;
+  gap: 0.45rem;
+  pointer-events: auto;
+}
+
+.game-has-discard .corner-tools {
+  bottom: 5.55rem;
+}
+
+.bullet-open {
+  position: static;
+  padding: 0.55rem 0.75rem;
+  pointer-events: auto;
+}
+
+.bullet-open:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.bullet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 1.2rem;
+  background: rgba(6, 16, 12, 0.72);
+}
+
+.bullet-dialog {
+  width: min(40rem, 100%);
+  max-height: calc(100dvh - 2.4rem);
+  overflow: auto;
+  padding: 0.8rem 0.9rem 1rem;
+  border: 1px solid var(--gold);
+  border-radius: 0.4rem;
+  background: var(--paper);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+}
+
+.bullet-close {
+  display: block;
+  margin: 0 0 0.7rem auto;
+  padding: 0.35rem 0.7rem;
+  background: var(--green);
+  color: var(--paper);
+}
+
+.bullet-paper {
+  color: var(--ink);
+  font-family: "Iowan Old Style", Palatino, Georgia, serif;
+}
+
+.pulka {
+  display: block;
+  width: min(100%, 36rem);
+  height: auto;
+  margin-inline: auto;
+  background: var(--paper);
+}
+
+.pulka-paper {
+  fill: var(--paper);
+}
+
+.pulka-cell,
+.pulka-block {
+  fill: none;
+  stroke: var(--green);
+}
+
+.pulka-cell {
+  stroke-opacity: 0.14;
+  stroke-width: 0.7;
+}
+
+.pulka-block {
+  stroke-opacity: 0.28;
+  stroke-width: 1.05;
+}
+
+.pulka-quiet {
+  fill: #8d8680;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.pulka-plus,
+.pulka-minus {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.pulka-plus {
+  fill: #1b7a46;
+}
+
+.pulka-minus {
+  fill: #b42318;
+}
+
+.pulka-ink {
+  fill: none;
+  stroke: var(--green);
+  stroke-width: 1.75;
+  stroke-linejoin: miter;
+}
+
+.pulka-seal {
+  fill: var(--paper);
+  stroke: var(--green);
+  stroke-width: 1.75;
+}
+
+.pulka text {
+  fill: var(--ink);
+  stroke: none;
+  text-anchor: start;
+  dominant-baseline: hanging;
+  font-family: "Iowan Old Style", Palatino, Georgia, serif;
+}
+
+.pulka-pact {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.pulka-figure {
+  font-size: 16px;
+  font-weight: 700;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.pulka text.pulka-turned,
+.pulka text.pulka-name,
+.pulka text.pulka-center {
+  text-anchor: middle;
+  dominant-baseline: middle;
+}
+
+.pulka-name {
+  fill: var(--green);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.bullet-result {
+  margin: 0.7rem 0 0;
+  text-align: center;
+  font-size: 1.05rem;
+}
+
+.last-trick {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  pointer-events: auto;
+}
+
+.last-trick summary {
+  cursor: pointer;
+  color: var(--paper);
+  font-weight: 600;
+}
+
+.game-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.4rem;
+}
+
+.game-actions button {
+  border: 0;
+  border-radius: 0.48rem;
+  padding: 0.5rem 0.7rem;
+  background: var(--paper);
+  color: var(--ink);
+  font: 600 0.9rem/1.2 "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+  cursor: pointer;
+}
+
+.game-error {
+  margin: 0;
+  padding: 0.65rem 0.75rem;
+  border-radius: 0.5rem;
+  background: #f8ebe6;
+  color: #8d3428;
+  font-weight: 600;
+}
+
+.bid-cell:focus-visible,
+.bid-pass:focus-visible,
+.game-actions button:focus-visible {
+  outline: 2px solid #f0e2c4;
+  outline-offset: 2px;
+}
+
+@media (max-width: 640px) {
+  .game-title {
+    font-size: 1.6rem;
+  }
+
+  .game-top {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .pc {
+    width: 3.35rem;
+    height: 4.85rem;
+  }
+
+  .game-hand .pc + .pc {
+    margin-left: -1.85rem;
+  }
+
+  .game-hand .pc + .pc.pc-break {
+    margin-left: 0.45rem;
+  }
+
+  .game-hand {
+    min-height: 5.4rem;
+  }
+
+  .pc-suit {
+    font-size: 1.25rem;
+  }
+
+  .pc-corner {
+    font-size: 0.75rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bid-cell:hover,
+  .pc-selected {
+    transform: none;
+  }
+}
