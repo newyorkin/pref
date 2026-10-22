@@ -40,10 +40,13 @@ export {
   type GameAction,
   type GamePhase,
   type PlayedDeal,
+  type Proposal,
   type GameSeatView,
   type GameSettings,
   type GameState,
   type GameTransition,
+  type SpeechDeal,
+  type TableSpeech,
 } from "./game.js";
 export {
   applyRaspasOutcome,

@@ -479,6 +479,9 @@ describe("complete game state", () => {
 
     expect(state.phase).toBe("discard");
     expect(state.score.bullet).toEqual([0, 0, 1]);
+    expect(gameView(state, 0).speech.map((line) => line.word)).toContain(
+      "туз в пулю",
+    );
     expect(state.score.mountain).toEqual([0, 0, 0]);
     expect(state.score.last.bullet).toEqual([0, 0, 1]);
     expect(state.talon?.hands[0]).toEqual([...original, ...talon]);
@@ -513,6 +516,9 @@ describe("complete game state", () => {
       { type: "auction", action: { type: "pass" } },
     );
     expect(state.score.bullet).toEqual([0, 0, 2]);
+    expect(gameView(state, 0).speech.map((line) => line.word)).toContain(
+      "два туза в пулю",
+    );
 
     state = act(state, 0, { type: "throwTalon" });
 
@@ -526,6 +532,7 @@ describe("complete game state", () => {
     expect(state.talon?.faced).toBe(true);
     expect(gameView(state, 1).discarded).toEqual([...talon]);
     expect(gameView(state, 1).facedTalon).toBe(true);
+    expect(gameView(state, 0).speech.at(-1)?.word).toBe("прикуп в лицо");
     const thrown = state;
 
     state = act(state, 0, { type: "withoutThree" });
@@ -590,6 +597,9 @@ describe("complete game state", () => {
     );
     expect(miser.phase).toBe("discard");
     expect(miser.score).toEqual(createBulletScore());
+    expect(gameView(miser, 0).speech.map((line) => line.word)).not.toContain(
+      "туз в пулю",
+    );
     expect(gameView(miser, 0).allowedActions[0]).toEqual({
       type: "throwTalon",
     });
@@ -804,6 +814,7 @@ describe("complete game state", () => {
       card: card("hearts", 7),
     });
     expect(state.play?.trickHistory[0]?.cards[2]?.seat).toBe(2);
+    expect(gameView(state, 0).trickHistory[0]).not.toHaveProperty("talonCard");
     expect(state.play?.hands[1]).toEqual([card("diamonds", 9)]);
     expect(state.play?.hands[2]).toEqual([card("clubs", 10)]);
   });
@@ -1388,6 +1399,18 @@ describe("complete game state", () => {
     expect(state.phase).toBe("auction");
     expect(state.play).toBeNull();
     expect(state.dealNumber).toBe(1);
+    expect(gameView(state, 0).speech).toEqual([]);
+    expect(
+      gameView(state, 0).speechLog.map((entry) => ({
+        deal: entry.deal,
+        words: entry.lines.map((line) => line.word),
+      })),
+    ).toEqual([
+      {
+        deal: 1,
+        words: ["6 червей", "пас", "пас", "7 треф", "пас", "пас"],
+      },
+    ]);
     expect(state.score.bullet).toEqual([4, 0, 0]);
     expect(state.score.mountain).toEqual([0, 0, 0]);
     expect(state.score.whists).toEqual([
@@ -1489,6 +1512,18 @@ describe("complete game state", () => {
     expect(raspas.play?.forcedSuit).toBe("spades");
     expect(gameView(raspas, 0).prikup).toEqual([card("spades", 7)]);
     expect(gameView(raspas, 1).prikup).toEqual([card("spades", 7)]);
+    expect(raspas.play?.trickHistory[0]).not.toHaveProperty("talonCard");
+    expect(gameView(raspas, 0).trickHistory).toEqual([
+      {
+        winner: 2,
+        talonCard: card("hearts", 7),
+        cards: [
+          { seat: 0, card: card("clubs", 8) },
+          { seat: 1, card: card("hearts", 8) },
+          { seat: 2, card: card("hearts", 14) },
+        ],
+      },
+    ]);
 
     raspas = act(raspas, 2, { type: "playCard", card: card("spades", 9) });
     raspas = act(raspas, 0, { type: "playCard", card: card("spades", 8) });
@@ -1498,6 +1533,33 @@ describe("complete game state", () => {
     expect(raspas.play?.forcedSuit ?? null).toBeNull();
     expect(gameView(raspas, 0).prikup).toEqual([]);
     expect(gameView(raspas, 2).prikup).toEqual([]);
+    expect(gameView(raspas, 1).trickHistory[1]).toEqual({
+      winner: 1,
+      talonCard: card("spades", 7),
+      cards: [
+        { seat: 2, card: card("spades", 9) },
+        { seat: 0, card: card("spades", 8) },
+        { seat: 1, card: card("spades", 14) },
+      ],
+    });
+
+    raspas = act(raspas, 0, { type: "playCard", card: card("diamonds", 8) });
+    raspas = act(raspas, 1, { type: "playCard", card: card("clubs", 9) });
+    raspas = act(raspas, 2, { type: "playCard", card: card("diamonds", 9) });
+    expect(gameView(raspas, 2).trickHistory[2]).toEqual({
+      winner: 2,
+      cards: [
+        { seat: 0, card: card("diamonds", 8) },
+        { seat: 1, card: card("clubs", 9) },
+        { seat: 2, card: card("diamonds", 9) },
+      ],
+    });
+    expect(gameView(raspas, 0).trickHistory[0]?.talonCard).toEqual(
+      card("hearts", 7),
+    );
+    expect(gameView(raspas, 0).trickHistory[1]?.talonCard).toEqual(
+      card("spades", 7),
+    );
   });
 
   test("pass, half-whist and pass scores the contract without a play", () => {
@@ -1621,4 +1683,231 @@ describe("complete game state", () => {
     expect(half.reason).toBe("invalidDeclaration");
     expect(half.state).toBe(state);
   });
+
+  test("speech keeps the current step in bubbles and earlier calls in order", () => {
+    const room = { ...settings, bulletTarget: 10 };
+    let state = createGame(room, 1);
+    expect(gameView(state, 0).speech).toEqual([]);
+    expect(currentWords(state)).toEqual({});
+
+    state = act(state, 0, {
+      type: "auction",
+      action: {
+        type: "bid",
+        bid: { type: "contract", level: 6, trump: "spades" },
+      },
+    });
+    expect(currentWords(state)).toEqual({ 0: "6 пик" });
+
+    state = act(state, 1, { type: "auction", action: { type: "pass" } });
+    expect(currentWords(state)).toEqual({ 0: "6 пик", 1: "пас" });
+
+    state = act(state, 2, {
+      type: "auction",
+      action: {
+        type: "bid",
+        bid: { type: "contract", level: 6, trump: "clubs" },
+      },
+    });
+    expect(currentWords(state)).toEqual({ 2: "6 треф" });
+    expect(currentWords(state)).not.toHaveProperty("0");
+
+    state = act(state, 0, { type: "auction", action: { type: "pass" } });
+    expect(state.phase).toBe("discard");
+    expect(currentWords(state)).toEqual({});
+    const declarer = state.auctionResult?.type === "contract"
+      ? state.auctionResult.declarer
+      : null;
+    expect(declarer).toBe(2);
+    const discard = gameView(state, 2).allowedActions.find(
+      (action) => action.type === "discard",
+    );
+    expect(discard?.type).toBe("discard");
+    if (discard?.type !== "discard") {
+      return;
+    }
+    state = act(state, 2, discard);
+    state = act(state, 2, {
+      type: "order",
+      bid: { type: "contract", level: 6, trump: "clubs" },
+    });
+    expect(state.phase).toBe("defense");
+    expect(currentWords(state)).toEqual({});
+    expect(gameView(state, 0).speech.map((item) => item.word)).toEqual([
+      "6 пик",
+      "пас",
+      "6 треф",
+      "пас",
+      "6 треф",
+    ]);
+
+    state = act(state, 0, { type: "defense", action: { type: "whist" } });
+    state = act(state, 1, { type: "defense", action: { type: "pass" } });
+    expect(currentWords(state)).toEqual({ 0: "вист", 1: "пас" });
+    expect(Object.values(currentWords(state))).not.toContain("6 пик");
+    expect(Object.values(currentWords(state))).not.toContain("6 треф");
+    expect(state.score.bullet).toEqual([0, 0, 0]);
+    expect(state.score.mountain).toEqual([0, 0, 0]);
+  });
+
+  test("a single whistler can accept the declarer's proposal and write the deal", () => {
+    const card = (suit: Suit, rank: Card["rank"]): Card => ({ suit, rank });
+    let state = orderedContract(6);
+    state = act(state, 1, { type: "defense", action: { type: "pass" } });
+    state = act(state, 2, { type: "defense", action: { type: "whist" } });
+    expect(state.phase).toBe("play");
+    expect(gameView(state, 0).allowedActions).toEqual([
+      ...[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((tricks) => ({
+        type: "propose" as const,
+        tricks,
+      })),
+      { type: "playCard", card: card("spades", 14) },
+      { type: "playCard", card: card("clubs", 9) },
+    ]);
+    expect(
+      gameView(state, 1).allowedActions.some(
+        (action) => action.type === "propose",
+      ),
+    ).toBe(false);
+
+    const low = applyGameAction(state, 0, { type: "propose", tricks: 0 });
+    expect(low.accepted).toBe(false);
+    expect(low.reason).toBe("invalidProposal");
+    const stranger = applyGameAction(state, 2, { type: "propose", tricks: 6 });
+    expect(stranger.accepted).toBe(false);
+    expect(stranger.reason).toBe("notYourTurn");
+
+    state = act(state, 0, { type: "propose", tricks: 6 });
+    expect(currentWords(state)).toEqual({ 0: "6 запишем?" });
+    expect(gameView(state, 1).shownHands[0]).toEqual([
+      card("spades", 14),
+      card("clubs", 9),
+    ]);
+    expect(gameView(state, 2).shownHands[0]).toEqual([
+      card("spades", 14),
+      card("clubs", 9),
+    ]);
+    expect(gameView(state, 0).shownHands[0]).toBeNull();
+    expect(gameView(state, 1).allowedActions).toEqual([
+      { type: "proposal", answer: "agree" },
+      { type: "proposal", answer: "decline" },
+    ]);
+    expect(gameView(state, 0).allowedActions).toEqual([]);
+    const during = applyGameAction(state, 0, {
+      type: "playCard",
+      card: card("spades", 14),
+    });
+    expect(during.accepted).toBe(false);
+    expect(during.reason).toBe("invalidPhase");
+
+    state = act(state, 1, { type: "proposal", answer: "agree" });
+    expect(currentWords(state)).toEqual({ 0: "6 запишем?", 1: "согласен" });
+    expect(gameView(state, 1).allowedActions).toEqual([]);
+    expect(state.phase).toBe("play");
+
+    const repeat = applyGameAction(state, 1, {
+      type: "proposal",
+      answer: "decline",
+    });
+    expect(repeat.accepted).toBe(false);
+
+    state = act(state, 2, { type: "proposal", answer: "agree" });
+    expect(state.phase).toBe("auction");
+    expect(state.deals?.[0]?.tricks).toEqual([6, 0, 4]);
+    expect(state.deals?.[0]?.contract).toBe("6 пик");
+    expect(state.score.bullet).toEqual([2, 0, 0]);
+    expect(state.score.whists[2][0]).toBe(8);
+    expect(state.score.whists[1][0]).toBe(0);
+    expect(state.score.mountain).toEqual([0, 0, 0]);
+    expect(state.speechLog?.[0]?.lines.map((line) => line.word)).toEqual(
+      expect.arrayContaining(["6 запишем?", "согласен", "согласен"]),
+    );
+  });
+
+  test("a refused proposal returns to the play and a short bid writes mountain and whists", () => {
+    const card = (suit: Suit, rank: Card["rank"]): Card => ({ suit, rank });
+    let state = orderedContract(6);
+    state = act(state, 1, { type: "defense", action: { type: "whist" } });
+    state = act(state, 2, { type: "defense", action: { type: "whist" } });
+    const both = applyGameAction(state, 0, { type: "propose", tricks: 6 });
+    expect(both.accepted).toBe(false);
+    expect(both.reason).toBe("invalidPhase");
+    expect(
+      gameView(state, 0).allowedActions.some(
+        (action) => action.type === "propose",
+      ),
+    ).toBe(false);
+
+    state = orderedContract(6);
+    state = act(state, 1, { type: "defense", action: { type: "pass" } });
+    state = act(state, 2, { type: "defense", action: { type: "whist" } });
+    state = {
+      ...state,
+      play:
+        state.play === null
+          ? null
+          : { ...state.play, tricksWon: [3, 0, 1] },
+    };
+    expect(
+      gameView(state, 0).allowedActions.flatMap((action) =>
+        action.type === "propose" ? [action.tricks] : [],
+      ),
+    ).toEqual([3, 4, 5, 6, 7, 8, 9, 10]);
+    const early = applyGameAction(state, 0, { type: "propose", tricks: 2 });
+    expect(early.accepted).toBe(false);
+    expect(early.reason).toBe("invalidProposal");
+
+    state = act(state, 0, { type: "propose", tricks: 4 });
+    expect(currentWords(state)).toEqual({ 0: "4 запишем?" });
+    state = act(state, 2, { type: "proposal", answer: "decline" });
+    expect(state.phase).toBe("play");
+    expect(state.proposal ?? null).toBeNull();
+    expect(currentWords(state)).toEqual({ 2: "не согласен" });
+    expect(gameView(state, 1).shownHands[0]).toBeNull();
+    expect(gameView(state, 0).speech.map((line) => line.word)).toContain(
+      "4 запишем?",
+    );
+    expect(
+      gameView(state, 0).allowedActions.some(
+        (action) => action.type === "playCard",
+      ),
+    ).toBe(true);
+
+    state = act(state, 0, { type: "propose", tricks: 4 });
+    state = act(state, 1, { type: "proposal", answer: "agree" });
+    state = act(state, 2, { type: "proposal", answer: "agree" });
+    expect(state.deals?.[0]?.tricks).toEqual([4, 0, 6]);
+    expect(state.score.bullet).toEqual([0, 0, 0]);
+    expect(state.score.mountain[0]).toBe(4);
+    expect(state.score.whists[2][0]).toBe(16);
+    expect(state.score.whists[1][0]).toBe(4);
+    expect(state.score.mountain[2]).toBe(0);
+  });
+
+  test("three passes stay on one step and the log ends with raspas", () => {
+    let state = createGame({ ...settings, bulletTarget: 10 }, 4);
+    for (const seat of [0, 1, 2] as const) {
+      state = act(state, seat, { type: "auction", action: { type: "pass" } });
+    }
+    expect(state.phase).toBe("raspas");
+    const view = gameView(state, 1);
+    expect(view.speech).toEqual([
+      { seat: 0, word: "пас", step: 1 },
+      { seat: 1, word: "пас", step: 1 },
+      { seat: 2, word: "пас", step: 1 },
+      { seat: null, word: "распасы", step: 1 },
+    ]);
+    expect(currentWords(state)).toEqual({ 0: "пас", 1: "пас", 2: "пас" });
+  });
 });
+
+function currentWords(state: GameState): Record<number, string> {
+  const view = gameView(state, 0);
+  const words: Record<number, string> = {};
+  for (const item of view.speech) {
+    if (item.step === view.speechStep && item.seat !== null) {
+      words[item.seat] = item.word;
+    }
+  }
+  return words;
+}

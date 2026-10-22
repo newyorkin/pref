@@ -9,6 +9,7 @@ export interface PlayedCard {
 export interface CompletedTrick {
   readonly cards: readonly PlayedCard[];
   readonly winner: Seat;
+  readonly talonCard?: Card;
 }
 
 export interface TrickPlayState {

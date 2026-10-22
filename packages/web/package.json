@@ -8,6 +8,7 @@
     "build": "vite build"
   },
   "dependencies": {
+    "@pref/engine": "workspace:*",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },

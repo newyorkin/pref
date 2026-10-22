@@ -63,7 +63,18 @@ export type GameAction =
   | { readonly type: "openTalon"; readonly index: 0 | 1 }
   | { readonly type: "defense"; readonly action: DefenseAction }
   | { readonly type: "playCard"; readonly card: Card }
+  | { readonly type: "propose"; readonly tricks: number }
+  | { readonly type: "proposal"; readonly answer: "agree" | "decline" }
   | { readonly type: "rematch"; readonly seed: number };
+
+export interface Proposal {
+  readonly tricks: number;
+  readonly answers: readonly [
+    "agree" | "decline" | null,
+    "agree" | "decline" | null,
+    "agree" | "decline" | null,
+  ];
+}
 
 export interface PlayedDeal {
   readonly number: number;
@@ -84,6 +95,17 @@ export interface DealLayout {
   readonly tricks: readonly [number, number, number];
 }
 
+export interface TableSpeech {
+  readonly seat: Seat | null;
+  readonly word: string;
+  readonly step: number;
+}
+
+export interface SpeechDeal {
+  readonly deal: number;
+  readonly lines: readonly TableSpeech[];
+}
+
 export interface GameState {
   readonly settings: GameSettings;
   readonly phase: GamePhase;
@@ -98,12 +120,16 @@ export interface GameState {
   readonly talon: TalonState | null;
   readonly defense: DefenseState | null;
   readonly play: TrickPlayState | null;
+  readonly proposal?: Proposal | null;
   readonly lastLayout?: DealLayout | null;
   readonly deals?: readonly PlayedDeal[];
   readonly layoutHands?: DealLayout["hands"] | null;
   readonly raspasOrder?: readonly [Card, Card] | null;
   readonly prikupShown?: number;
   readonly misereCalls?: number;
+  readonly speech?: readonly TableSpeech[];
+  readonly speechStep?: number;
+  readonly speechLog?: readonly SpeechDeal[];
 }
 
 export type GameTransition =
@@ -144,6 +170,9 @@ export interface GameSeatView {
   readonly prikup: readonly (Card | { readonly faceDown: true })[];
   readonly lastLayout: DealLayout | null;
   readonly deals: readonly PlayedDeal[];
+  readonly speech: readonly TableSpeech[];
+  readonly speechStep: number;
+  readonly speechLog: readonly SpeechDeal[];
 }
 
 const BID_LADDER: readonly Bid[] = [
@@ -190,15 +219,20 @@ export function applyGameAction(
     if (!transition.accepted) {
       return reject(state, transition.reason);
     }
+    const voiced = {
+      ...state,
+      ...speechForAuction(state, seat, action.action),
+    };
     if (transition.state.result === null) {
-      return accept({ ...state, auction: transition.state });
+      return accept({ ...voiced, auction: transition.state });
     }
 
     const auctionResult = transition.state.result;
-    const talon = takeTalon(state.dealtCards, auctionResult);
+    const talon = takeTalon(voiced.dealtCards, auctionResult);
     if (auctionResult.type === "raspas") {
       return accept({
-        ...state,
+        ...voiced,
+        ...withSpeech(voiced, null, "распасы", false),
         phase: "raspas",
         auction: transition.state,
         auctionResult,
@@ -208,13 +242,23 @@ export function applyGameAction(
         prikupShown: 0,
       });
     }
+    const score = openedTalonScore(voiced, auctionResult);
+    const quiet = {
+      ...voiced,
+      ...advanceSpeech(voiced),
+    };
+    const ace = talonAceWord(bulletGain(voiced.score, score));
+    const noted =
+      ace === null
+        ? quiet
+        : { ...quiet, ...withSpeech(quiet, null, ace, true) };
     return accept({
-      ...state,
+      ...noted,
       phase: "discard",
       auction: transition.state,
       auctionResult,
       talon,
-      score: openedTalonScore(state, auctionResult),
+      score,
     });
   }
 
@@ -252,7 +296,12 @@ export function applyGameAction(
       if (seat !== state.auctionResult.declarer) {
         return reject(state, "notYourTurn");
       }
-      return accept(finishWithoutThree(state));
+      return accept(
+        finishWithoutThree({
+          ...state,
+          ...withSpeech(state, seat, "без трёх", true),
+        }),
+      );
     }
     if (action.type !== "order") {
       return reject(state, "invalidPhase");
@@ -273,12 +322,17 @@ export function applyGameAction(
             trump: action.bid.trump,
           };
     const auction = { ...state.auction, result: auctionResult };
+    const voiced = {
+      ...state,
+      ...withSpeech(state, seat, bidWord(action.bid), true),
+    };
     if (auctionResult.type === "misere") {
       if ((state.misereCalls ?? 0) < 1) {
-        return accept({ ...state, misereCalls: 1 });
+        return accept({ ...voiced, misereCalls: 1 });
       }
       return accept({
-        ...state,
+        ...voiced,
+        ...advanceSpeech(voiced),
         phase: "play",
         auction,
         auctionResult,
@@ -286,7 +340,8 @@ export function applyGameAction(
       });
     }
     return accept({
-      ...state,
+      ...voiced,
+      ...advanceSpeech(voiced),
       phase: "defense",
       auction,
       auctionResult,
@@ -310,13 +365,17 @@ export function applyGameAction(
     if (!transition.accepted) {
       return reject(state, transition.reason);
     }
+    const voiced = {
+      ...state,
+      ...speechForDefense(state, seat, action.action),
+    };
     if (transition.state.phase !== "play") {
       if (
         transition.state.phase === "style" &&
-        declarerOpens(state)
+        declarerOpens(voiced)
       ) {
         return accept({
-          ...state,
+          ...voiced,
           phase: "play",
           defense: transition.state,
           ...withPlay(
@@ -328,10 +387,10 @@ export function applyGameAction(
           ),
         });
       }
-      return accept({ ...state, defense: transition.state });
+      return accept({ ...voiced, defense: transition.state });
     }
     if (transition.state.whistlers.length === 0) {
-      const closed = { ...state, defense: transition.state };
+      const closed = { ...voiced, defense: transition.state };
       return accept(
         transition.state.halfWhist === null
           ? finishPassedContract(closed)
@@ -339,7 +398,7 @@ export function applyGameAction(
       );
     }
     return accept({
-      ...state,
+      ...voiced,
       phase: "play",
       defense: transition.state,
       ...withPlay(
@@ -378,6 +437,17 @@ export function applyGameAction(
     });
   }
 
+  if (state.phase === "play" && state.proposal != null) {
+    if (action.type !== "proposal") {
+      return reject(state, "invalidPhase");
+    }
+    return answerProposal(state, seat, action.answer);
+  }
+
+  if (state.phase === "play" && action.type === "propose") {
+    return offerProposal(state, seat, action.tricks);
+  }
+
   if (styleChoiceDue(state)) {
     if (
       action.type !== "defense" ||
@@ -391,7 +461,11 @@ export function applyGameAction(
     if (!choice.accepted) {
       return reject(state, choice.reason);
     }
-    return accept({ ...state, defense: choice.state });
+    return accept({
+      ...state,
+      ...speechForDefense(state, seat, action.action),
+      defense: choice.state,
+    });
   }
 
   if (action.type !== "playCard" || state.play === null) {
@@ -430,7 +504,7 @@ export function gameView(state: GameState, seat: Seat): GameSeatView {
     auction: state.auction,
     defense: state.defense,
     currentTrick: playView?.currentTrick ?? [],
-    trickHistory: playView?.trickHistory ?? [],
+    trickHistory: raspasTrickHistory(state),
     tricksWon: playView?.tricksWon ?? [0, 0, 0],
     score: state.score,
     raspasIndex: state.raspasIndex,
@@ -452,7 +526,7 @@ export function gameView(state: GameState, seat: Seat): GameSeatView {
     facedTalon: state.talon?.faced === true,
     openHand: openWhistHand(state),
     openSeat: lightPartners(state)?.passer ?? null,
-    shownHands: shownWhistHands(state, seat),
+    shownHands: proposedHands(shownWhistHands(state, seat), state, seat),
     turn: gameTurn(state),
     allowedActions: allowedGameActions(state, seat),
     settlement:
@@ -460,7 +534,19 @@ export function gameView(state: GameState, seat: Seat): GameSeatView {
     prikup: prikupCards(state),
     lastLayout: state.lastLayout ?? null,
     deals: state.deals ?? [],
+    speech: state.speech ?? [],
+    speechStep: state.speechStep ?? 0,
+    speechLog: visibleSpeechLog(state),
   };
+}
+
+function visibleSpeechLog(state: GameState): readonly SpeechDeal[] {
+  const prior = state.speechLog ?? [];
+  const lines = state.speech ?? [];
+  if (lines.length === 0) {
+    return prior;
+  }
+  return [...prior, { deal: state.dealNumber + 1, lines }];
 }
 
 function lightPartners(
@@ -721,15 +807,182 @@ function allowedGameActions(
       : [];
   }
   if (state.phase === "play" && state.play !== null) {
+    if (state.proposal != null) {
+      return proposalReplies(state, seat);
+    }
+    const offers = proposalOffers(state, seat);
     const handSeat = playedHand(state, seat);
     if (handSeat === null) {
-      return [];
+      return offers;
     }
-    return state.play.hands[handSeat]
-      .filter((card) => playCard(state.play!, handSeat, card).accepted)
-      .map((card) => ({ type: "playCard", card }));
+    return [
+      ...offers,
+      ...state.play.hands[handSeat]
+        .filter((card) => playCard(state.play!, handSeat, card).accepted)
+        .map((card) => ({ type: "playCard" as const, card })),
+    ];
   }
   return [];
+}
+
+function proposalAvailable(state: GameState): boolean {
+  return (
+    state.phase === "play" &&
+    state.play !== null &&
+    state.proposal == null &&
+    state.auctionResult?.type === "contract" &&
+    state.defense?.whistlers.length === 1 &&
+    !styleChoiceDue(state)
+  );
+}
+
+function proposalOffers(state: GameState, seat: Seat): readonly GameAction[] {
+  if (!proposalAvailable(state) || state.auctionResult?.type !== "contract") {
+    return [];
+  }
+  if (seat !== state.auctionResult.declarer || state.play === null) {
+    return [];
+  }
+  const floor = Math.max(1, state.play.tricksWon[seat]);
+  const offers: GameAction[] = [];
+  for (let tricks = floor; tricks <= 10; tricks += 1) {
+    offers.push({ type: "propose", tricks });
+  }
+  return offers;
+}
+
+function proposalReplies(state: GameState, seat: Seat): readonly GameAction[] {
+  const proposal = state.proposal;
+  if (
+    proposal == null ||
+    state.auctionResult?.type !== "contract" ||
+    seat === state.auctionResult.declarer ||
+    proposal.answers[seat] !== null
+  ) {
+    return [];
+  }
+  return [
+    { type: "proposal", answer: "agree" },
+    { type: "proposal", answer: "decline" },
+  ];
+}
+
+function offerProposal(
+  state: GameState,
+  seat: Seat,
+  tricks: number,
+): GameTransition {
+  if (!proposalAvailable(state) || state.auctionResult?.type !== "contract") {
+    return reject(state, "invalidPhase");
+  }
+  if (seat !== state.auctionResult.declarer) {
+    return reject(state, "notYourTurn");
+  }
+  const floor = Math.max(1, state.play?.tricksWon[seat] ?? 0);
+  if (!Number.isInteger(tricks) || tricks < floor || tricks > 10) {
+    return reject(state, "invalidProposal");
+  }
+  return accept({
+    ...state,
+    ...withSpeech(state, seat, `${tricks} запишем?`, true),
+    proposal: { tricks, answers: [null, null, null] },
+  });
+}
+
+function answerProposal(
+  state: GameState,
+  seat: Seat,
+  answer: "agree" | "decline",
+): GameTransition {
+  const proposal = state.proposal;
+  if (
+    proposal == null ||
+    state.auctionResult?.type !== "contract" ||
+    seat === state.auctionResult.declarer ||
+    proposal.answers[seat] !== null
+  ) {
+    return reject(state, "notYourTurn");
+  }
+  if (answer === "decline") {
+    return accept({
+      ...state,
+      ...withSpeech(state, seat, "не согласен", true),
+      proposal: null,
+    });
+  }
+  const answers: Proposal["answers"] = [
+    seat === 0 ? "agree" : proposal.answers[0],
+    seat === 1 ? "agree" : proposal.answers[1],
+    seat === 2 ? "agree" : proposal.answers[2],
+  ];
+  const voiced: GameState = {
+    ...state,
+    ...withSpeech(state, seat, "согласен", false),
+    proposal: { tricks: proposal.tricks, answers },
+  };
+  const declarer = state.auctionResult.declarer;
+  const both = ([0, 1, 2] as const).every(
+    (place) => place === declarer || answers[place] === "agree",
+  );
+  return accept(both ? finishProposal(voiced) : voiced);
+}
+
+function finishProposal(state: GameState): GameState {
+  const auctionResult = state.auctionResult;
+  const proposal = state.proposal;
+  const whistler = state.defense?.whistlers[0];
+  if (
+    auctionResult?.type !== "contract" ||
+    proposal == null ||
+    whistler === undefined ||
+    state.play === null
+  ) {
+    throw new Error("Cannot record a proposal");
+  }
+  const tricks = [0, 0, 0] as [number, number, number];
+  tricks[auctionResult.declarer] = proposal.tricks;
+  tricks[whistler] = 10 - proposal.tricks;
+  const passer = state.defense?.defenders.find(
+    (defender) => state.defense?.decisions[defender] === "pass",
+  );
+  return closeScoredDeal(
+    {
+      ...state,
+      proposal: null,
+      play: { ...state.play, result: tricks },
+    },
+    {
+      type: "contract",
+      declarer: auctionResult.declarer,
+      level: auctionResult.level,
+      tricks,
+      whistlers: [whistler],
+      ...(passer === undefined ? {} : { passer }),
+    },
+    proposal.tricks >= auctionResult.level,
+  );
+}
+
+function proposedHands(
+  hands: GameSeatView["shownHands"],
+  state: GameState,
+  viewer: Seat,
+): GameSeatView["shownHands"] {
+  if (
+    state.proposal == null ||
+    state.play === null ||
+    state.auctionResult?.type !== "contract" ||
+    viewer === state.auctionResult.declarer
+  ) {
+    return hands;
+  }
+  const declarer = state.auctionResult.declarer;
+  const hand = state.play.hands[declarer];
+  return [
+    declarer === 0 ? hand : hands[0],
+    declarer === 1 ? hand : hands[1],
+    declarer === 2 ? hand : hands[2],
+  ];
 }
 
 function finishDeal(state: GameState): GameState {
@@ -858,6 +1111,7 @@ function closeScoredDeal(
   );
   const lastLayout = rememberLayout(state);
   const deals = [...(state.deals ?? []), playedDeal(state, scoredDeal, score)];
+  const speechLog = archiveSpeech(state);
   if (isBulletComplete(score, state.settings.bulletTarget)) {
     return {
       ...state,
@@ -876,7 +1130,17 @@ function closeScoredDeal(
     raspasIndex,
     lastLayout,
     deals,
+    speechLog,
   );
+}
+
+function archiveSpeech(state: GameState): readonly SpeechDeal[] {
+  const prior = state.speechLog ?? [];
+  const lines = state.speech ?? [];
+  if (lines.length === 0) {
+    return prior;
+  }
+  return [...prior, { deal: state.dealNumber + 1, lines }];
 }
 
 function raspasIndexAfterDeal(
@@ -925,9 +1189,13 @@ function throwTalonInFace(state: GameState, seat: Seat): GameTransition {
   if (!transition.accepted) {
     return reject(state, transition.reason);
   }
+  const voiced = {
+    ...state,
+    ...withSpeech(state, seat, "прикуп в лицо", true),
+  };
   return accept(
     continueAfterDiscard(
-      state,
+      voiced,
       { ...transition.state, faced: true },
       scoreSince(
         state.scoreAtDealStart ?? state.score,
@@ -935,6 +1203,22 @@ function throwTalonInFace(state: GameState, seat: Seat): GameTransition {
       ),
     ),
   );
+}
+
+function bulletGain(before: BulletScore, after: BulletScore): number {
+  const sum = (score: BulletScore) =>
+    score.bullet[0] + score.bullet[1] + score.bullet[2];
+  return sum(after) - sum(before);
+}
+
+function talonAceWord(written: number): string | null {
+  if (written === 1) {
+    return "туз в пулю";
+  }
+  if (written >= 2) {
+    return "два туза в пулю";
+  }
+  return null;
 }
 
 function openedTalonScore(
@@ -1053,6 +1337,29 @@ function continueRaspas(state: GameState, play: TrickPlayState): GameState {
   return { ...state, play };
 }
 
+function raspasTrickHistory(
+  state: GameState,
+): TrickPlayState["trickHistory"] {
+  const history = state.play?.trickHistory ?? [];
+  if (
+    state.auctionResult?.type !== "raspas" ||
+    state.raspasOrder === undefined ||
+    state.raspasOrder === null
+  ) {
+    return history;
+  }
+  const order = state.raspasOrder;
+  return history.map((trick, index) => {
+    if (index === 0) {
+      return { ...trick, talonCard: order[0] };
+    }
+    if (index === 1) {
+      return { ...trick, talonCard: order[1] };
+    }
+    return trick;
+  });
+}
+
 function prikupCards(
   state: GameState,
 ): readonly (Card | { readonly faceDown: true })[] {
@@ -1098,6 +1405,7 @@ function startDeal(
   raspasIndex: number,
   lastLayout: DealLayout | null = null,
   deals: readonly PlayedDeal[] = [],
+  speechLog: readonly SpeechDeal[] = [],
 ): GameState {
   const dealtCards = deal(seed + dealNumber);
   return {
@@ -1119,6 +1427,7 @@ function startDeal(
     raspasOrder: null,
     prikupShown: 0,
     deals,
+    speechLog,
   };
 }
 
@@ -1129,6 +1438,73 @@ const TRUMP_NAME = {
   hearts: "червей",
   noTrump: "без козыря",
 } as const;
+
+function withSpeech(
+  state: GameState,
+  seat: Seat | null,
+  word: string,
+  fresh: boolean,
+): { speech: readonly TableSpeech[]; speechStep: number } {
+  const speech = state.speech ?? [];
+  const current = state.speechStep ?? 0;
+  const step = fresh ? current + 1 : Math.max(current, 1);
+  return {
+    speechStep: step,
+    speech: [...speech, { seat, word, step }],
+  };
+}
+
+function advanceSpeech(
+  state: GameState,
+): { speech: readonly TableSpeech[]; speechStep: number } {
+  return {
+    speech: state.speech ?? [],
+    speechStep: (state.speechStep ?? 0) + 1,
+  };
+}
+
+function bidWord(bid: Bid): string {
+  if (bid.type === "misere") {
+    return "мизер";
+  }
+  return `${bid.level} ${TRUMP_NAME[bid.trump]}`;
+}
+
+function speechForAuction(
+  state: GameState,
+  seat: Seat,
+  action: AuctionAction,
+): { speech: readonly TableSpeech[]; speechStep: number } {
+  if (action.type === "pass") {
+    return withSpeech(state, seat, "пас", false);
+  }
+  return withSpeech(state, seat, bidWord(action.bid), true);
+}
+
+function defenseWord(action: DefenseAction): string {
+  if (action.type === "pass") {
+    return "пас";
+  }
+  if (action.type === "whist") {
+    return "вист";
+  }
+  if (action.type === "halfWhist") {
+    return "полвиста";
+  }
+  if (action.type === "light") {
+    return "всветлую";
+  }
+  return "втёмную";
+}
+
+function speechForDefense(
+  state: GameState,
+  seat: Seat,
+  action: DefenseAction,
+): { speech: readonly TableSpeech[]; speechStep: number } {
+  const fresh = action.type === "light" || action.type === "dark";
+  return withSpeech(state, seat, defenseWord(action), fresh);
+}
 
 function playedDeal(
   state: GameState,

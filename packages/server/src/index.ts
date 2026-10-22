@@ -1138,6 +1138,16 @@ function isGameAction(value: unknown): value is GameAction {
   if (value.type === "throwTalon" || value.type === "withoutThree") {
     return true;
   }
+  if (value.type === "propose") {
+    return (
+      Number.isInteger(value.tricks) &&
+      (value.tricks as number) >= 1 &&
+      (value.tricks as number) <= 10
+    );
+  }
+  if (value.type === "proposal") {
+    return value.answer === "agree" || value.answer === "decline";
+  }
   if (value.type === "rematch") {
     return Number.isSafeInteger(value.seed);
   }

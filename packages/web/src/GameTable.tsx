@@ -1,6 +1,17 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { settleBullet, type BulletScore } from "@pref/engine";
 
 import type { TableSettings } from "./App.js";
+import {
+  CardFaceLayers,
+  cardArtSrc,
+  cardScaleStyle,
+  rankLetter,
+  suitSequence,
+  finishedTrick,
+  pauseMilliseconds,
+  useDisplayProfile,
+} from "./profile.js";
 import "./table.css";
 
 interface Card {
@@ -14,6 +25,8 @@ interface GameAction {
   cards?: [Card, Card];
   index?: 0 | 1;
   seed?: number;
+  tricks?: number;
+  answer?: "agree" | "decline";
   bid?: AuctionBid;
   action?: {
     type: string;
@@ -53,6 +66,7 @@ export interface GameSnapshot {
   trickHistory: Array<{
     winner: number;
     cards: Array<{ seat: number; card: Card }>;
+    talonCard?: Card;
   }>;
   tricksWon: [number, number, number];
   score: {
@@ -87,6 +101,9 @@ export interface GameSnapshot {
   turn?: number | null;
   allowedActions: GameAction[];
   prikup?: Array<Card | { faceDown: true }>;
+  speech?: TableSpeech[];
+  speechStep?: number;
+  speechLog?: SpeechDeal[];
   lastLayout?: {
     hands: [Card[], Card[], Card[]];
     talon: Card[];
@@ -94,6 +111,17 @@ export interface GameSnapshot {
     tricks?: [number, number, number];
   } | null;
   deals?: PlayedDeal[];
+}
+
+interface TableSpeech {
+  seat: number | null;
+  word: string;
+  step: number;
+}
+
+interface SpeechDeal {
+  deal: number;
+  lines: TableSpeech[];
 }
 
 interface PlayedDeal {
@@ -148,9 +176,16 @@ export function nextClientState(
     };
   }
   if (message.type === "rejected") {
-    const error = auctionError(
-      typeof message.reason === "string" ? message.reason : "rejected",
-    );
+    const reason =
+      typeof message.reason === "string" ? message.reason : "rejected";
+    if (
+      reason === "versionMismatch" &&
+      current !== null &&
+      message.version === current.version
+    ) {
+      return { snapshot: current, error: null };
+    }
+    const error = auctionError(reason);
     if (typeof message.version === "number" && isRecord(message.state)) {
       return {
         snapshot: envelope(message, tableId, current),
@@ -181,7 +216,7 @@ function envelope(
 function auctionError(reason: string): string {
   const text: Record<string, string> = {
     versionMismatch:
-      "Стол уже изменился. Заявка не прошла, на экране актуальный торг.",
+      "Стол уже изменился. Этот ход не засчитан, на экране актуальное положение.",
     notYourTurn: "Сейчас заявка другого места.",
     bidNotHigher: "Нужна заявка выше текущей.",
     onlyPass: "После мизера можно только пасовать.",
@@ -238,12 +273,12 @@ export function GameTable({
   const [error, setError] = useState<string | null>(null);
   const socket = useRef<WebSocket | null>(null);
   const snapshotRef = useRef<SnapshotEnvelope | null>(null);
+  const inflightRef = useRef(false);
   const connectRef = useRef<(() => void) | null>(null);
   const [occupiedSeats, setOccupiedSeats] = useState<boolean[] | null>(null);
   const [playerNames, setPlayerNames] = useState<(string | null)[] | null>(
     null,
   );
-  snapshotRef.current = snapshot;
 
   useEffect(() => {
     let stopped = false;
@@ -285,6 +320,7 @@ export function GameTable({
               snapshotRef.current,
               tableId,
             );
+            inflightRef.current = false;
             if (next.snapshot !== null) {
               snapshotRef.current = next.snapshot;
               setSnapshot(next.snapshot);
@@ -292,6 +328,7 @@ export function GameTable({
             setError(next.error);
           })
           .catch(() => {
+            inflightRef.current = false;
             setError("Не удалось прочитать ответ стола");
           });
       });
@@ -354,6 +391,9 @@ export function GameTable({
   function sendAction(action: GameAction): void {
     const current = snapshotRef.current;
     const currentSocket = socket.current;
+    if (inflightRef.current) {
+      return;
+    }
     if (
       current === null ||
       currentSocket === null ||
@@ -363,6 +403,11 @@ export function GameTable({
       connectRef.current?.();
       return;
     }
+    inflightRef.current = true;
+    window.setTimeout(() => {
+      inflightRef.current = false;
+    }, 4000);
+    setError(null);
     currentSocket.send(
       JSON.stringify({
         tableId,
@@ -415,9 +460,50 @@ export function GameSnapshotPanel({
   playerNames?: (string | null)[] | null;
 }): React.JSX.Element {
   const state = snapshot.state;
+  const profile = useDisplayProfile();
   const [selected, setSelected] = useState<Card[]>([]);
   const [bulletOpen, setBulletOpen] = useState(false);
   const [layoutOpen, setLayoutOpen] = useState(false);
+  const [seenSnapshot, setSeenSnapshot] = useState(snapshot);
+  const [heldTrick, setHeldTrick] = useState<GameSnapshot["currentTrick"] | null>(
+    null,
+  );
+  const [leadCard, setLeadCard] = useState<Card | null>(null);
+  if (snapshot !== seenSnapshot) {
+    const cards = finishedTrick(seenSnapshot.state, snapshot.state);
+    setSeenSnapshot(snapshot);
+    setLeadCard(null);
+    if (profile.trickPause === 0) {
+      setHeldTrick(null);
+    } else if (cards !== null) {
+      setHeldTrick(cards);
+    }
+  } else if (profile.trickPause === 0 && heldTrick !== null) {
+    setHeldTrick(null);
+  } else if (error !== null && leadCard !== null) {
+    setLeadCard(null);
+  }
+  function playNow(action: GameAction): void {
+    if (
+      action.type === "playCard" &&
+      action.card !== undefined &&
+      heldTrick !== null
+    ) {
+      setHeldTrick(null);
+      setLeadCard(action.card);
+    }
+    onAction(action);
+  }
+  useEffect(() => {
+    if (heldTrick === null || profile.trickPause === 0) {
+      return;
+    }
+    const timer = window.setTimeout(
+      () => setHeldTrick(null),
+      pauseMilliseconds(profile.trickPause),
+    );
+    return () => window.clearTimeout(timer);
+  }, [heldTrick, profile.trickPause]);
   const layoutLocked =
     state.phase === "play" && state.trickHistory.length > 0;
   useEffect(() => {
@@ -443,6 +529,12 @@ export function GameSnapshotPanel({
   const throwAction = state.allowedActions.find(
     (action) => action.type === "throwTalon",
   );
+  const proposeActions = state.allowedActions.filter(
+    (action) => action.type === "propose" && action.tricks !== undefined,
+  );
+  const proposalReplies = state.allowedActions.filter(
+    (action) => action.type === "proposal",
+  );
   const otherActions = state.allowedActions.filter(
     (action) =>
       action.type !== "auction" &&
@@ -451,7 +543,9 @@ export function GameSnapshotPanel({
       action.type !== "openTalon" &&
       action.type !== "playCard" &&
       action.type !== "discard" &&
-      action.type !== "throwTalon",
+      action.type !== "throwTalon" &&
+      action.type !== "propose" &&
+      action.type !== "proposal",
   );
   const trump = state.trump ?? null;
   const sharedTalon =
@@ -463,9 +557,16 @@ export function GameSnapshotPanel({
   const showOrder = state.phase === "order";
   const leftSeat = (seat + 1) % 3;
   const rightSeat = (seat + 2) % 3;
-  const hand = sortHand(state.hand);
+  const hand = sortHand(state.hand, profile.handOrder, profile.suitOrder);
+  const tableTrick =
+    heldTrick !== null
+      ? heldTrick
+      : leadCard !== null && state.currentTrick.length === 0
+        ? [{ seat, card: leadCard }]
+        : state.currentTrick;
   const dealer = (state.dealNumber + 2) % 3;
   const gap = emptySeatMessage(occupiedSeats, state.auction.turn);
+  const spoken = wordsOnStep(state.speech, state.speechStep);
 
   return (
     <main
@@ -477,6 +578,8 @@ export function GameSnapshotPanel({
       ]
         .filter((name) => name !== "")
         .join(" ")}
+      data-card-face={profile.cardFace}
+      style={cardScaleStyle(profile.cardScale)}
     >
       {error === null ? null : (
         <p className="game-error" role="alert">
@@ -522,6 +625,12 @@ export function GameSnapshotPanel({
         </section>
       ) : null}
 
+      <DealLog
+        log={speechEntries(state)}
+        viewer={seat}
+        names={playerNames}
+      />
+
       {gameTitle(state.auction.result, playerNames, seat)}
 
       {state.handSizes === undefined ? null : (
@@ -538,9 +647,8 @@ export function GameSnapshotPanel({
             openCards={visibleOpponent(state, leftSeat)}
             playActions={playActions}
             trump={trump}
-            onAction={onAction}
-            passed={state.auction.active?.[leftSeat] === false}
-            side="left"
+            onAction={playNow}
+            word={shownBubble(spoken.get(leftSeat), state.phase)}
           />
           <Opponent
             place={rightSeat}
@@ -554,9 +662,8 @@ export function GameSnapshotPanel({
             openCards={visibleOpponent(state, rightSeat)}
             playActions={playActions}
             trump={trump}
-            onAction={onAction}
-            passed={state.auction.active?.[rightSeat] === false}
-            side="right"
+            onAction={playNow}
+            word={shownBubble(spoken.get(rightSeat), state.phase)}
           />
         </section>
       )}
@@ -565,10 +672,6 @@ export function GameSnapshotPanel({
         <AuctionBoard
           auction={state.auction}
           actions={auctionActions}
-          seat={seat}
-          names={playerNames}
-          dealer={dealer}
-          viewer={seat}
           onAction={onAction}
         />
       ) : null}
@@ -577,19 +680,9 @@ export function GameSnapshotPanel({
         <OrderBoard
           auction={state.auction}
           actions={orderActions}
-          names={playerNames}
-          viewer={seat}
           onAction={onAction}
         />
       ) : null}
-
-      {showOrder ||
-      state.auction.result == null ||
-      typeof state.turn !== "number" ? null : (
-        <p className="contract-banner">
-          {turnLabel(state.turn, playerNames, seat)}
-        </p>
-      )}
 
       {state.phase === "raspas" ? (
         <p className="contract-banner">Откройте прикуп</p>
@@ -640,13 +733,19 @@ export function GameSnapshotPanel({
         </section>
       ) : null}
 
-      {state.currentTrick.length === 0 ? null : (
-        <section className="trick" aria-label="Текущая взятка">
-          {state.currentTrick.map((played) =>
+      {tableTrick.length === 0 ? null : (
+        <section
+          className="trick trick-play"
+          aria-label="Текущая взятка"
+          data-third={
+            tableTrick.length < 3 ? undefined : thirdCardSide(tableTrick[2])
+          }
+        >
+          {tableTrick.map((played, index) =>
             "faceDown" in played.card ? (
               <span
                 key={played.seat}
-                className="card-back trick-back"
+                className={`card-back trick-back trick-at-${index}`}
                 aria-label="Рубашка"
               />
             ) : (
@@ -654,6 +753,7 @@ export function GameSnapshotPanel({
                 key={played.seat}
                 card={played.card}
                 trump={trump === played.card.suit}
+                placeClass={`trick-at-${index}`}
               />
             ),
           )}
@@ -679,7 +779,16 @@ export function GameSnapshotPanel({
         {lastTrick === undefined ? null : (
           <details className="last-trick">
             <summary>Последняя взятка</summary>
-            <div className="trick">
+            <div
+              className={
+                lastTrick.talonCard === undefined
+                  ? "trick"
+                  : "trick trick-with-talon"
+              }
+            >
+              {lastTrick.talonCard === undefined ? null : (
+                <PlayingCard card={lastTrick.talonCard} talon />
+              )}
               {lastTrick.cards.map((played) => (
                 <PlayingCard
                   key={played.seat}
@@ -697,7 +806,88 @@ export function GameSnapshotPanel({
         )}
       </aside>
 
-      <section className="game-hand" aria-label="Ваши карты">
+      <div className="hand-seat">
+        {discardActions.length === 0 && throwAction === undefined ? null : (
+          <section className="game-actions">
+            {discardActions.length === 0 ? null : (
+              <button
+                type="button"
+                disabled={selected.length !== 2}
+                onClick={() => {
+                  const action = discardActions.find((candidate) =>
+                    candidate.cards?.every((card) =>
+                      selected.some((item) => sameCard(item, card)),
+                    ),
+                  );
+                  if (action !== undefined) {
+                    onAction(action);
+                  }
+                }}
+              >
+                Снести две карты
+              </button>
+            )}
+            {throwAction === undefined ? null : (
+              <button type="button" onClick={() => onAction(throwAction)}>
+                {actionLabel(throwAction)}
+              </button>
+            )}
+          </section>
+        )}
+
+        {proposeActions.length === 0 ? null : (
+          <section className="game-actions proposal">
+            <details>
+              <summary>Моих</summary>
+              <div className="proposal-choices">
+                {proposeActions.map((action) => (
+                  <button
+                    type="button"
+                    key={action.tricks}
+                    onClick={() => onAction(action)}
+                  >
+                    {`моих ${action.tricks}`}
+                  </button>
+                ))}
+              </div>
+            </details>
+          </section>
+        )}
+
+        {proposalReplies.length === 0 ? null : (
+          <section className="game-actions">
+            {proposalReplies.map((action) => (
+              <button
+                type="button"
+                key={action.answer}
+                onClick={() => onAction(action)}
+              >
+                {action.answer === "agree" ? "Согласен" : "Не согласен"}
+              </button>
+            ))}
+          </section>
+        )}
+
+        {otherActions.length === 0 ? null : (
+          <section className="game-actions">
+            {otherActions.map((action, index) => (
+              <button
+                type="button"
+                key={`${actionLabel(action)}:${index}`}
+                onClick={() => onAction(action)}
+              >
+                {actionLabel(action)}
+              </button>
+            ))}
+          </section>
+        )}
+
+        {shownBubble(spoken.get(seat), state.phase) === undefined ? null : (
+          <p className="speech-bubble">
+            <SpeechWord word={shownBubble(spoken.get(seat), state.phase) ?? ""} />
+          </p>
+        )}
+        <section className="game-hand" aria-label="Ваши карты">
         {hand.map((card, index) => {
           const play = playActions.find((action) =>
             sameCard(action.card, card),
@@ -720,12 +910,13 @@ export function GameSnapshotPanel({
                   ? () => toggleSelected(card, selected, setSelected)
                   : play === undefined
                     ? undefined
-                    : () => onAction(play)
+                    : () => playNow(play)
               }
             />
           );
         })}
-      </section>
+        </section>
+      </div>
       {(state.discarded ?? []).length === 0 ? null : (
         <section
           className="discard-pile"
@@ -742,48 +933,6 @@ export function GameSnapshotPanel({
               />
             ))}
           </div>
-        </section>
-      )}
-
-      {discardActions.length === 0 && throwAction === undefined ? null : (
-        <section className="game-actions">
-          {discardActions.length === 0 ? null : (
-            <button
-              type="button"
-              disabled={selected.length !== 2}
-              onClick={() => {
-                const action = discardActions.find((candidate) =>
-                  candidate.cards?.every((card) =>
-                    selected.some((item) => sameCard(item, card)),
-                  ),
-                );
-                if (action !== undefined) {
-                  onAction(action);
-                }
-              }}
-            >
-              Снести две карты
-            </button>
-          )}
-          {throwAction === undefined ? null : (
-            <button type="button" onClick={() => onAction(throwAction)}>
-              {actionLabel(throwAction)}
-            </button>
-          )}
-        </section>
-      )}
-
-      {otherActions.length === 0 ? null : (
-        <section className="game-actions">
-          {otherActions.map((action, index) => (
-            <button
-              type="button"
-              key={`${actionLabel(action)}:${index}`}
-              onClick={() => onAction(action)}
-            >
-              {actionLabel(action)}
-            </button>
-          ))}
         </section>
       )}
 
@@ -830,6 +979,7 @@ export function GameSnapshotPanel({
               viewer={seat}
               names={playerNames}
               bulletTarget={settings.bulletTarget}
+              deals={state.deals ?? []}
             />
           </div>
         </div>
@@ -880,8 +1030,7 @@ function Opponent({
   playActions,
   trump,
   onAction,
-  passed,
-  side,
+  word,
 }: {
   place: number;
   name: string | null;
@@ -891,48 +1040,51 @@ function Opponent({
   playActions: GameAction[];
   trump: string | null;
   onAction: (action: GameAction) => void;
-  passed: boolean;
-  side: "left" | "right";
+  word: string | undefined;
 }): React.JSX.Element {
-  const visible = sortHand(openCards);
-  const openClass =
-    visible.length === 0
-      ? "opponent"
-      : side === "right"
-        ? "opponent opponent-open opponent-open-right"
-        : "opponent opponent-open";
+  const profile = useDisplayProfile();
+  const visible = sortHand(openCards, "asc", profile.suitOrder);
+  const bySuit = profile.openLayout === "suits";
+  const rows = bySuit ? suitRows(visible) : [visible];
+  function openCard(card: Card, index: number): React.JSX.Element {
+    const play = playActions.find((action) => sameCard(action.card, card));
+    return (
+      <PlayingCard
+        key={`${card.suit}:${card.rank}:${index}`}
+        card={card}
+        trump={trump === card.suit}
+        onClick={play === undefined ? undefined : () => onAction(play)}
+      />
+    );
+  }
   return (
-    <div className={openClass}>
+    <div className="opponent">
+      <div className="opponent-word">
+        {word === undefined ? null : (
+          <p className="speech-bubble">
+            <SpeechWord word={word} />
+          </p>
+        )}
+      </div>
       {visible.length > 0 ? (
-        <div className="opponent-cards" aria-label="Карты всветлую">
-          {suitGroups(visible).map((group) => (
-            <div className="open-suit" key={group[0]?.suit}>
-              <span
-                className={
-                  isRedSuit(group[0]?.suit ?? "")
-                    ? "open-suit-mark bid-red"
-                    : "open-suit-mark"
-                }
-              >
-                {suitSymbol(group[0]?.suit ?? "")}
-              </span>
-              {group.map((card, index) => {
-                const play = playActions.find((action) =>
-                  sameCard(action.card, card),
-                );
-                return (
-                  <PlayingCard
-                    key={`${card.suit}:${card.rank}:${index}`}
-                    card={card}
-                    trump={trump === card.suit}
-                    onClick={
-                      play === undefined ? undefined : () => onAction(play)
-                    }
-                  />
-                );
-              })}
-            </div>
-          ))}
+        <div
+          className={
+            bySuit ? "opponent-cards opponent-cards-suits" : "opponent-cards"
+          }
+          aria-label="Карты всветлую"
+          style={
+            bySuit
+              ? undefined
+              : ({ "--open-count": String(visible.length) } as CSSProperties)
+          }
+        >
+          {bySuit
+            ? rows.map((row) => (
+                <div key={row[0]?.suit ?? "suit"} className="opponent-suit-row">
+                  {row.map((card, index) => openCard(card, index))}
+                </div>
+              ))
+            : visible.map((card, index) => openCard(card, index))}
         </div>
       ) : (
         <div className="backs" aria-hidden="true">
@@ -944,10 +1096,7 @@ function Opponent({
       <p className="opponent-name">
         {name ?? (empty ? "свободно" : `Место ${place + 1}`)}
       </p>
-      <p className="opponent-meta">
-        {cardsLabel(cards)}
-        {passed ? " · пас" : ""}
-      </p>
+      <p className="opponent-meta">{cardsLabel(cards)}</p>
     </div>
   );
 }
@@ -955,68 +1104,27 @@ function Opponent({
 function AuctionBoard({
   auction,
   actions,
-  seat,
-  names,
-  dealer,
-  viewer,
   onAction,
 }: {
   auction: AuctionSnapshot;
   actions: GameAction[];
-  seat: number;
-  names: (string | null)[] | null;
-  dealer: number;
-  viewer: number;
   onAction: (action: GameAction) => void;
-}): React.JSX.Element {
+}): React.JSX.Element | null {
+  if (actions.length === 0) {
+    return null;
+  }
   const pass = actions.find(isAuctionPass);
-  const yourTurn = actions.length > 0;
-  const call = bidCaption(auction.highestBid);
-  const bidder =
-    auction.highestBidder === undefined || auction.highestBidder === null
-      ? null
-      : seatLabel(auction.highestBidder, viewer, names, dealer);
-  const turn = typeof auction.turn === "number" ? auction.turn : null;
-  const turnText = turnLabel(yourTurn ? seat : turn, names, viewer);
 
   return (
     <section className="auction" aria-label="Торги">
-      <p className={yourTurn ? "bid-turn bid-turn-you" : "bid-turn"}>
-        {turnText}
-      </p>
-      <p className="bid-call">
-        {call === null ? "Торг открыт" : call}
-        {call !== null && bidder !== null ? <span> · {bidder}</span> : null}
-      </p>
-      {auction.active === undefined ? null : (
-        <p className="bid-round">
-          В торге: {traders(auction.active, Number(seat), names, dealer)}
-        </p>
-      )}
-      {yourTurn ? null : (
-        <p className="bid-wait">
-          Торг продолжается. {turnLabel(turn, names, viewer)}.
-        </p>
-      )}
-      {yourTurn ? (
       <div className="bid-grid">
-        <span />
-        {TRUMPS.map((trump) => (
-          <span
-            key={trump}
-            className={
-              isRedSuit(trump) ? "bid-head bid-red" : "bid-head"
-            }
-          >
-            {suitSymbol(trump)}
-          </span>
-        ))}
         {BID_ROWS.map((row) =>
           row === "misere" ? (
             <MisereCell
               key="misere"
               action={actions.find(isMisereBid)}
               current={auction.highestBid?.type === "misere"}
+              paired={pass !== undefined}
               onAction={onAction}
             />
           ) : (
@@ -1029,17 +1137,16 @@ function AuctionBoard({
             />
           ),
         )}
+        {pass === undefined ? null : (
+          <button
+            type="button"
+            className="bid-cell bid-pass-wide"
+            onClick={() => onAction(pass)}
+          >
+            Пас
+          </button>
+        )}
       </div>
-      ) : null}
-      {pass === undefined ? null : (
-        <button
-          type="button"
-          className="bid-pass"
-          onClick={() => onAction(pass)}
-        >
-          Пас
-        </button>
-      )}
     </section>
   );
 }
@@ -1047,29 +1154,18 @@ function AuctionBoard({
 function OrderBoard({
   auction,
   actions,
-  names,
-  viewer,
   onAction,
 }: {
   auction: AuctionSnapshot;
   actions: GameAction[];
-  names: (string | null)[] | null;
-  viewer: number;
   onAction: (action: GameAction) => void;
 }): React.JSX.Element {
   const yourTurn = actions.length > 0;
   const floor = resultBid(auction.result);
   const floorText = bidCaption(floor) ?? "мизер";
-  const turn =
-    typeof auction.result?.declarer === "number"
-      ? auction.result.declarer
-      : null;
 
   return (
     <section className="auction" aria-label="Заказ">
-      <p className={yourTurn ? "bid-turn bid-turn-you" : "bid-turn"}>
-        {yourTurn ? "Ваш заказ" : turnLabel(turn, names, viewer)}
-      </p>
       <p className="bid-call">
         {floor?.type === "misere"
           ? "Закажите мизер."
@@ -1090,15 +1186,6 @@ function OrderBoard({
         </button>
       ) : yourTurn ? (
         <div className="bid-grid">
-          <span />
-          {TRUMPS.map((trump) => (
-            <span
-              key={trump}
-              className={isRedSuit(trump) ? "bid-head bid-red" : "bid-head"}
-            >
-              {suitSymbol(trump)}
-            </span>
-          ))}
           {BID_ROWS.map((row) =>
             row === "misere" ? (
               actions.some((action) => action.type === "withoutThree") ? (
@@ -1129,9 +1216,7 @@ function OrderBoard({
             ),
           )}
         </div>
-      ) : (
-        <p className="bid-wait">Ждём заказ разыгрывающего.</p>
-      )}
+      ) : null}
     </section>
   );
 }
@@ -1145,6 +1230,7 @@ export function LayoutSheet({
   viewer: number;
   names: readonly (string | null)[] | null;
 }): React.JSX.Element {
+  const profile = useDisplayProfile();
   return (
     <div className="layout-board">
       {[0, 1, 2].map((place) => (
@@ -1156,10 +1242,11 @@ export function LayoutSheet({
               : ` · ${trickCount(layout.tricks[place] ?? 0)}`}
           </h2>
           <div className="layout-hand">
-            {sortHand(layout.hands[place] ?? []).map((card, index) => (
+            {sortHand(layout.hands[place] ?? [], "asc", profile.suitOrder).map((card, index) => (
               <PlayingCard
                 key={`${card.suit}:${card.rank}:${index}`}
                 card={card}
+                hideCornerSuit
               />
             ))}
           </div>
@@ -1173,6 +1260,7 @@ export function LayoutSheet({
               <PlayingCard
                 key={`${card.suit}:${card.rank}:${index}`}
                 card={card}
+                hideCornerSuit
               />
             ))}
           </div>
@@ -1186,6 +1274,7 @@ export function LayoutSheet({
               <PlayingCard
                 key={`${card.suit}:${card.rank}:${index}`}
                 card={card}
+                hideCornerSuit
               />
             ))}
           </div>
@@ -1193,6 +1282,19 @@ export function LayoutSheet({
       )}
     </div>
   );
+}
+
+function thirdCardSide(
+  played: GameSnapshot["currentTrick"][number] | undefined,
+): "above" | "below" {
+  if (played === undefined || "faceDown" in played.card) {
+    return played !== undefined && played.seat % 2 === 0 ? "above" : "below";
+  }
+  const salt = [...played.card.suit].reduce(
+    (sum, char) => sum + char.charCodeAt(0),
+    played.card.rank * 13 + played.seat,
+  );
+  return salt % 2 === 0 ? "above" : "below";
 }
 
 function trickCount(count: number): string {
@@ -1236,7 +1338,6 @@ function LevelRow({
 }): React.JSX.Element {
   return (
     <>
-      <span className="bid-level">{level}</span>
       {TRUMPS.map((trump) => {
         const action = actions.find((candidate) => {
           const bid = contractOf(candidate);
@@ -1247,13 +1348,19 @@ function LevelRow({
           current?.type === "contract" &&
           current.level === level &&
           current.trump === trump;
+        const label = (
+          <span className="bid-face">
+            <span className="bid-count">{level}</span>
+            <span className="bid-suit">{symbol}</span>
+          </span>
+        );
         if (action === undefined) {
           return (
             <span
               key={trump}
               className={currentBid ? "bid-slot bid-current" : "bid-slot"}
             >
-              {currentBid ? symbol : ""}
+              {label}
             </span>
           );
         }
@@ -1265,7 +1372,7 @@ function LevelRow({
             aria-label={`${level} ${symbol}`}
             onClick={() => onAction(action)}
           >
-            {symbol}
+            {label}
           </button>
         );
       })}
@@ -1276,23 +1383,28 @@ function LevelRow({
 function MisereCell({
   action,
   current,
+  paired = false,
   onAction,
 }: {
   action: GameAction | undefined;
   current: boolean;
+  paired?: boolean;
   onAction: (action: GameAction) => void;
 }): React.JSX.Element {
   if (action === undefined) {
+    const quiet = paired ? "bid-misere bid-span-2" : "bid-misere";
     return (
-      <span className={current ? "bid-misere bid-current" : "bid-misere"}>
-        Мизер
-      </span>
+      <span className={current ? `${quiet} bid-current` : quiet}>Мизер</span>
     );
   }
   return (
     <button
       type="button"
-      className="bid-cell bid-misere-btn"
+      className={
+        paired
+          ? "bid-cell bid-misere-btn bid-span-2"
+          : "bid-cell bid-misere-btn"
+      }
       onClick={() => onAction(action)}
     >
       Мизер
@@ -1306,6 +1418,8 @@ function PlayingCard({
   trump = false,
   talon = false,
   selected = false,
+  hideCornerSuit = false,
+  placeClass,
   onClick,
 }: {
   card: Card;
@@ -1313,6 +1427,8 @@ function PlayingCard({
   trump?: boolean;
   talon?: boolean;
   selected?: boolean;
+  hideCornerSuit?: boolean;
+  placeClass?: string;
   onClick?: () => void;
 }): React.JSX.Element {
   const className = [
@@ -1322,24 +1438,34 @@ function PlayingCard({
     trump ? "pc-trump" : "",
     talon ? "pc-talon" : "",
     selected ? "pc-selected" : "",
+    placeClass ?? "",
   ]
     .filter((item) => item.length > 0)
     .join(" ");
   const label = `${rankLabel(card.rank)} ${suitSymbol(card.suit)}${talon ? ", прикуп" : ""}`;
-  const body = (
-    <>
-      <span className="pc-corner">
-        <span>{rankLabel(card.rank)}</span>
-        <span>{suitSymbol(card.suit)}</span>
-      </span>
-      <span className="pc-suit" aria-hidden="true">
-        {suitSymbol(card.suit)}
-      </span>
-    </>
-  );
+  const profile = useDisplayProfile();
+  const art = cardArtSrc(profile.cardFace, card.suit, card.rank);
+  const court = card.rank >= 11 && card.rank <= 13 ? "true" : undefined;
+  const ace = card.rank === 14 ? "true" : undefined;
+  const body =
+    art === null ? (
+      <CardFaceLayers
+        rank={card.rank}
+        rankText={rankLetter(card.rank, profile.cardLang)}
+        suitText={suitSymbol(card.suit)}
+        hideCornerSuit={hideCornerSuit}
+      />
+    ) : (
+      <img className="pc-art" alt="" draggable={false} src={art} />
+    );
   if (onClick === undefined) {
     return (
-      <div className={className} aria-label={label}>
+      <div
+        className={className}
+        aria-label={label}
+        data-court={court}
+        data-ace={ace}
+      >
         {body}
       </div>
     );
@@ -1350,6 +1476,8 @@ function PlayingCard({
       className={className}
       aria-label={label}
       aria-pressed={selected}
+      data-court={court}
+      data-ace={ace}
       onClick={onClick}
     >
       {body}
@@ -1366,8 +1494,6 @@ const TRUMPS = [
 ] as const;
 
 const BID_ROWS = [6, 7, 8, 9, 10, "misere"] as const;
-
-const SUIT_ORDER = ["spades", "diamonds", "clubs", "hearts"];
 
 function suitSymbol(suit: string): string {
   if (suit === "spades") return "♠";
@@ -1390,21 +1516,43 @@ function rankLabel(rank: number): string {
   return String(rank);
 }
 
-function suitGroups(hand: readonly Card[]): Card[][] {
-  return SUIT_ORDER.flatMap((suit) => {
-    const group = hand.filter((card) => card.suit === suit);
-    return group.length === 0 ? [] : [group];
-  });
+function shownBubble(
+  word: string | undefined,
+  phase: string,
+): string | undefined {
+  if (phase === "play" && word === "вист") {
+    return undefined;
+  }
+  return word;
 }
 
-function sortHand(hand: readonly Card[]): Card[] {
+function sortHand(
+  hand: readonly Card[],
+  order: "asc" | "desc" = "asc",
+  suits: "sdch" | "scdh" = "sdch",
+): Card[] {
+  const sequence = suitSequence(suits);
+  const rankDirection = order === "desc" ? -1 : 1;
   return [...hand].sort((left, right) => {
-    const suit = SUIT_ORDER.indexOf(left.suit) - SUIT_ORDER.indexOf(right.suit);
+    const suit = sequence.indexOf(left.suit) - sequence.indexOf(right.suit);
     if (suit !== 0) {
       return suit;
     }
-    return left.rank - right.rank;
+    return (left.rank - right.rank) * rankDirection;
   });
+}
+
+function suitRows(cards: readonly Card[]): Card[][] {
+  const rows: Card[][] = [];
+  for (const card of cards) {
+    const last = rows[rows.length - 1];
+    if (last === undefined || last[0]?.suit !== card.suit) {
+      rows.push([card]);
+    } else {
+      last.push(card);
+    }
+  }
+  return rows;
 }
 
 function sameCard(left: Card | undefined, right: Card | undefined): boolean {
@@ -1588,17 +1736,19 @@ export function BulletSheet({
   viewer,
   names,
   bulletTarget,
+  deals = [],
 }: {
   score: GameSnapshot["score"];
   settlement: [number, number, number] | null;
   viewer: number;
   names: readonly (string | null)[] | null;
   bulletTarget: number;
+  deals?: readonly PlayedDeal[];
 }): React.JSX.Element {
-  const zeros: [number, number, number] = [0, 0, 0];
-  const lastBullet = score.last?.bullet ?? zeros;
-  const lastMountain = score.last?.mountain ?? zeros;
-  const lastWhists = score.last?.whists ?? [zeros, zeros, zeros];
+  const played = toBulletScore(score);
+  const earlier = scoreBeforeLast(played, score.last);
+  const now = settleBullet(played);
+  const then = settleBullet(earlier);
 
   const left = (viewer + 1) % 3;
   const right = (viewer + 2) % 3;
@@ -1606,16 +1756,28 @@ export function BulletSheet({
   const rightName = playerName(right, viewer, names);
   const viewerName = playerName(viewer, viewer, names);
   const mountain = (seat: number) =>
-    ruled(score.mountain[seat] ?? 0, lastMountain[seat] ?? 0);
-  const bullet = (seat: number) =>
-    ruled(score.bullet[seat] ?? 0, lastBullet[seat] ?? 0);
-  const whist = (from: number, to: number) =>
-    ruled(score.whists[from]?.[to] ?? 0, lastWhists[from]?.[to] ?? 0);
-  const standing = (seat: number) =>
-    standingParts(
-      playerStanding(score.bullet, score.mountain, score.whists, seat),
-      playerStanding(lastBullet, lastMountain, lastWhists, seat),
+    chainText(
+      deals,
+      (delta) => delta.mountain[seat] ?? 0,
+      score.mountain[seat] ?? 0,
+      false,
     );
+  const bullet = (seat: number) =>
+    chainText(
+      deals,
+      (delta) => delta.bullet[seat] ?? 0,
+      score.bullet[seat] ?? 0,
+      (score.bullet[seat] ?? 0) >= bulletTarget,
+    );
+  const whist = (from: number, to: number) =>
+    chainText(
+      deals,
+      (delta) => delta.whists[from]?.[to] ?? 0,
+      score.whists[from]?.[to] ?? 0,
+      false,
+    );
+  const standing = (seat: number) =>
+    standingParts(now[seat] ?? 0, (now[seat] ?? 0) - (then[seat] ?? 0));
 
   const leftEdge = 28;
   const rightEdge = 612;
@@ -1628,15 +1790,15 @@ export function BulletSheet({
   const westPool = westWhist + poolW;
   const eastWhist = rightEdge - whistW;
   const eastPool = eastWhist - poolW;
-  const apexY = 270;
+  const circleR = 38;
+  const circleY = 232;
+  const apexY = circleY;
   const rise = bottomEdge - apexY;
   const run = mid - leftEdge;
   const along = (x: number) => apexY + ((mid - x) * rise) / run;
   const diagonalX = (y: number) => mid - ((y - apexY) * run) / rise;
   const mountainBase = along(westPool);
   const poolBase = along(westWhist);
-  const circleR = 38;
-  const circleY = apexY - circleR;
   const whistSplit = (topEdge + bottomEdge) / 2;
   const westMountainX = (westPool + (mid - circleR)) / 2;
   const eastMountainX = mid * 2 - westMountainX;
@@ -1647,6 +1809,27 @@ export function BulletSheet({
   const viewerWhistY = (poolBase + bottomEdge) / 2 + 18;
   const viewerWhistWest = (diagonalX(viewerWhistY) + mid) / 2;
   const viewerWhistEast = mid * 2 - viewerWhistWest;
+  const verticalRoom = (center: number, top: number, bottom: number): number => {
+    const half = Math.min(center - top, bottom - center) - 10;
+    return Math.max(36, half * 2);
+  };
+  const horizontalRoom = (y: number): number =>
+    Math.max(36, (mid - diagonalX(y)) * 2 - 28);
+  const sideBulletRoom = verticalRoom(210, topEdge, mountainBase);
+  const sideMountainRoom = verticalRoom(118, topEdge, circleY - 16);
+  const sideWhistUpperRoom = verticalRoom(
+    (topEdge + whistSplit) / 2,
+    topEdge,
+    whistSplit,
+  );
+  const sideWhistLowerRoom = verticalRoom(
+    (whistSplit + bottomEdge) / 2,
+    whistSplit,
+    bottomEdge,
+  );
+  const viewerMountainRoom = horizontalRoom(368);
+  const viewerBulletRoom = horizontalRoom((mountainBase + poolBase) / 2);
+  const viewerWhistRoom = Math.max(36, horizontalRoom(viewerWhistY) * 0.42);
 
   return (
     <article className="bullet-paper">
@@ -1736,28 +1919,32 @@ export function BulletSheet({
           y={118}
           turn="left"
           kind="figure"
-          {...mountain(left)}
+          main={mountain(left)}
+          fit={sideMountainRoom}
         />
         <PulkaEntry
           x={westBulletX}
           y={210}
           turn="left"
           kind="figure"
-          {...bullet(left)}
+          main={bullet(left)}
+          fit={sideBulletRoom}
         />
         <PulkaEntry
           x={westWhistX}
           y={(topEdge + whistSplit) / 2}
           turn="left"
           kind="figure"
-          {...whist(left, right)}
+          main={whist(left, right)}
+          fit={sideWhistUpperRoom}
         />
         <PulkaEntry
           x={westWhistX}
           y={(whistSplit + bottomEdge) / 2}
           turn="left"
           kind="figure"
-          {...whist(left, viewer)}
+          main={whist(left, viewer)}
+          fit={sideWhistLowerRoom}
         />
         <PulkaEntry
           x={eastMountainX}
@@ -1772,28 +1959,32 @@ export function BulletSheet({
           y={118}
           turn="right"
           kind="figure"
-          {...mountain(right)}
+          main={mountain(right)}
+          fit={sideMountainRoom}
         />
         <PulkaEntry
           x={eastBulletX}
           y={210}
           turn="right"
           kind="figure"
-          {...bullet(right)}
+          main={bullet(right)}
+          fit={sideBulletRoom}
         />
         <PulkaEntry
           x={eastWhistX}
           y={(topEdge + whistSplit) / 2}
           turn="right"
           kind="figure"
-          {...whist(right, left)}
+          main={whist(right, left)}
+          fit={sideWhistUpperRoom}
         />
         <PulkaEntry
           x={eastWhistX}
           y={(whistSplit + bottomEdge) / 2}
           turn="right"
           kind="figure"
-          {...whist(right, viewer)}
+          main={whist(right, viewer)}
+          fit={sideWhistLowerRoom}
         />
         <PulkaEntry
           x={mid}
@@ -1808,28 +1999,32 @@ export function BulletSheet({
           y={368}
           turn="none"
           kind="figure"
-          {...mountain(viewer)}
+          main={mountain(viewer)}
+          fit={viewerMountainRoom}
         />
         <PulkaEntry
           x={mid}
           y={(mountainBase + poolBase) / 2}
           turn="none"
           kind="figure"
-          {...bullet(viewer)}
+          main={bullet(viewer)}
+          fit={viewerBulletRoom}
         />
         <PulkaEntry
           x={viewerWhistWest}
           y={viewerWhistY}
           turn="none"
           kind="figure"
-          {...whist(viewer, left)}
+          main={whist(viewer, left)}
+          fit={viewerWhistRoom}
         />
         <PulkaEntry
           x={viewerWhistEast}
           y={viewerWhistY}
           turn="none"
           kind="figure"
-          {...whist(viewer, right)}
+          main={whist(viewer, right)}
+          fit={viewerWhistRoom}
         />
       </svg>
       {settlement === null ? null : (
@@ -1853,16 +2048,18 @@ function PulkaEntry({
   turn,
   kind,
   main,
-  note,
+  note = null,
   tone = null,
+  fit,
 }: {
   x: number;
   y: number;
   turn: "left" | "right" | "none";
   kind: "name" | "figure";
   main: string;
-  note: string | null;
+  note?: string | null;
   tone?: number | null;
+  fit?: number;
 }): React.JSX.Element | null {
   if (main === "" && tone === null && note === null) {
     return null;
@@ -1879,6 +2076,8 @@ function PulkaEntry({
         {main === "" && tone === null ? note : ` ${note}`}
       </tspan>
     );
+  const fontSize =
+    kind === "figure" && fit !== undefined ? fitChain(main, fit) : undefined;
   return (
     <text
       x={x}
@@ -1886,6 +2085,7 @@ function PulkaEntry({
       className={
         kind === "name" ? "pulka-name pulka-center" : "pulka-figure pulka-center"
       }
+      fontSize={fontSize}
       transform={transform}
     >
       {main}
@@ -1897,6 +2097,55 @@ function PulkaEntry({
       {quiet}
     </text>
   );
+}
+
+function toBulletScore(score: GameSnapshot["score"]): BulletScore {
+  const whists = score.whists ?? [];
+  return {
+    bullet: triple(score.bullet),
+    mountain: triple(score.mountain),
+    whists: [triple(whists[0]), triple(whists[1]), triple(whists[2])],
+    last: {
+      bullet: [0, 0, 0],
+      mountain: [0, 0, 0],
+      whists: [
+        [0, 0, 0],
+        [0, 0, 0],
+        [0, 0, 0],
+      ],
+    },
+  };
+}
+
+function scoreBeforeLast(
+  score: BulletScore,
+  last: GameSnapshot["score"]["last"],
+): BulletScore {
+  return {
+    ...score,
+    bullet: minusTriple(score.bullet, last?.bullet),
+    mountain: minusTriple(score.mountain, last?.mountain),
+    whists: [
+      minusTriple(score.whists[0], last?.whists?.[0]),
+      minusTriple(score.whists[1], last?.whists?.[1]),
+      minusTriple(score.whists[2], last?.whists?.[2]),
+    ],
+  };
+}
+
+function triple(values: readonly number[] | undefined): [number, number, number] {
+  return [values?.[0] ?? 0, values?.[1] ?? 0, values?.[2] ?? 0];
+}
+
+function minusTriple(
+  value: readonly [number, number, number],
+  delta: readonly number[] | undefined,
+): [number, number, number] {
+  return [
+    value[0] - (delta?.[0] ?? 0),
+    value[1] - (delta?.[1] ?? 0),
+    value[2] - (delta?.[2] ?? 0),
+  ];
 }
 
 function netWhist(
@@ -1943,17 +2192,50 @@ function standingParts(
   };
 }
 
-function ruled(
-  value: number,
-  delta: number,
-): { main: string; note: string | null } {
-  if (value === 0 && delta === 0) {
-    return { main: "", note: null };
+function fieldChain(
+  deals: readonly PlayedDeal[],
+  read: (delta: PlayedDeal["delta"]) => number,
+  current: number,
+): number[] {
+  const totals: number[] = [];
+  let value = 0;
+  for (const deal of deals) {
+    const next = value + read(deal.delta);
+    if (next !== value) {
+      totals.push(next);
+      value = next;
+    }
   }
-  return {
-    main: value === 0 ? "" : `${plain(value)}.`,
-    note: delta === 0 ? null : `(${signed(delta)})`,
-  };
+  if (current !== value) {
+    totals.push(current);
+  }
+  return totals;
+}
+
+function chainText(
+  deals: readonly PlayedDeal[],
+  read: (delta: PlayedDeal["delta"]) => number,
+  current: number,
+  closed: boolean,
+): string {
+  const totals = fieldChain(deals, read, current);
+  if (totals.length === 0) {
+    return "";
+  }
+  const numbers = totals.map(plain);
+  if (!closed) {
+    return numbers.join(".");
+  }
+  return `${numbers.join(". ")} >>`;
+}
+
+function fitChain(text: string, room: number): number {
+  const base = 16;
+  const factor = 0.72;
+  if (text.length === 0 || text.length * factor * base <= room) {
+    return base;
+  }
+  return Math.round((room / (text.length * factor)) * 10) / 10;
 }
 
 function plain(value: number): string {
@@ -2064,7 +2346,11 @@ function gameTitle(
         )}
       </h1>
       {declarer === null ? null : (
-        <p className="game-declarer">Разыгрывает {declarer}</p>
+        <p className="game-declarer">
+          {typeof result.declarer === "number" && result.declarer === viewer
+            ? "Разыгрываете вы"
+            : `Разыгрывает ${declarer}`}
+        </p>
       )}
     </header>
   );
@@ -2136,37 +2422,197 @@ function seatLabel(
   return place === dealer ? `${who} (сдавал)` : who;
 }
 
-function traders(
-  active: readonly boolean[],
-  seat: number,
-  names: readonly (string | null)[] | null,
-  dealer: number,
-): string {
-  const playing = active.flatMap((stillIn, index) => {
-    if (!stillIn) {
-      return [];
+function wordsOnStep(
+  speech: readonly TableSpeech[] | undefined,
+  speechStep: number | undefined,
+): ReadonlyMap<number, string> {
+  const step = speechStep ?? 0;
+  const words = new Map<number, string>();
+  for (const item of speech ?? []) {
+    if (item.step === step && item.seat !== null) {
+      words.set(item.seat, item.word);
     }
-    return [seatLabel(index, seat, names, dealer)];
-  });
-  return playing.length === 0 ? "никто" : playing.join(", ");
+  }
+  return words;
 }
 
-function turnLabel(
-  turn: number | null | undefined,
-  names: readonly (string | null)[] | null | undefined,
-  viewer: number,
-): string {
-  if (turn === undefined || turn === null) {
-    return "Ожидание";
+const LOG_BOX_KEY = "pref.logBox";
+const LOG_BOX_DEFAULT = { width: 240, height: 148 };
+
+function readLogBox(): { width: number; height: number } {
+  if (typeof localStorage === "undefined") {
+    return LOG_BOX_DEFAULT;
   }
-  if (turn === viewer) {
-    return "Ваш ход";
+  const raw = localStorage.getItem(LOG_BOX_KEY);
+  if (raw === null) {
+    return LOG_BOX_DEFAULT;
   }
-  const who = playerName(turn, viewer, names);
-  if (who.startsWith("место ")) {
-    return `Ход места ${who.slice("место ".length)}`;
+  try {
+    const value = JSON.parse(raw) as { width?: unknown; height?: unknown };
+    if (typeof value.width !== "number" || typeof value.height !== "number") {
+      return LOG_BOX_DEFAULT;
+    }
+    return {
+      width: clampBox(value.width, 160, 640),
+      height: clampBox(value.height, 72, 520),
+    };
+  } catch {
+    return LOG_BOX_DEFAULT;
   }
-  return `Ход ${who}`;
+}
+
+function clampBox(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function DealLog({
+  log,
+  viewer,
+  names,
+}: {
+  log: readonly SpeechDeal[];
+  viewer: number;
+  names: readonly (string | null)[] | null;
+}): React.JSX.Element {
+  const scroller = useRef<HTMLDivElement>(null);
+  const [box, setBox] = useState(readLogBox);
+  const lineCount = log.reduce((sum, deal) => sum + deal.lines.length, 0);
+  useEffect(() => {
+    const node = scroller.current;
+    if (node !== null) {
+      node.scrollTop = node.scrollHeight;
+    }
+  }, [lineCount]);
+  useEffect(() => {
+    if (typeof localStorage === "undefined") {
+      return;
+    }
+    localStorage.setItem(LOG_BOX_KEY, JSON.stringify(box));
+  }, [box]);
+  function startResize(
+    event: React.PointerEvent<HTMLDivElement>,
+    mode: "x" | "y" | "xy",
+  ): void {
+    event.preventDefault();
+    const handle = event.currentTarget;
+    const origin = {
+      x: event.clientX,
+      y: event.clientY,
+      width: box.width,
+      height: box.height,
+    };
+    handle.setPointerCapture(event.pointerId);
+    const move = (ev: PointerEvent): void => {
+      const maxWidth = Math.min(640, window.innerWidth - 24);
+      const maxHeight = Math.min(520, window.innerHeight - 96);
+      setBox({
+        width:
+          mode === "y"
+            ? origin.width
+            : clampBox(origin.width + ev.clientX - origin.x, 160, maxWidth),
+        height:
+          mode === "x"
+            ? origin.height
+            : clampBox(origin.height + origin.y - ev.clientY, 72, maxHeight),
+      });
+    };
+    const end = (): void => {
+      handle.removeEventListener("pointermove", move);
+      handle.removeEventListener("pointerup", end);
+      handle.removeEventListener("pointercancel", end);
+    };
+    handle.addEventListener("pointermove", move);
+    handle.addEventListener("pointerup", end);
+    handle.addEventListener("pointercancel", end);
+  }
+  return (
+    <aside
+      className="deal-log"
+      aria-label="Лог"
+      style={{ width: box.width, height: box.height }}
+    >
+      <div
+        className="deal-log-resize deal-log-resize-y"
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label="Высота лога"
+        onPointerDown={(event) => startResize(event, "y")}
+      />
+      <div
+        className="deal-log-resize deal-log-resize-x"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Ширина лога"
+        onPointerDown={(event) => startResize(event, "x")}
+      />
+      <div
+        className="deal-log-resize deal-log-resize-xy"
+        role="separator"
+        aria-label="Размер лога"
+        onPointerDown={(event) => startResize(event, "xy")}
+      />
+      <h2>Лог</h2>
+      <div className="deal-log-scroll" ref={scroller}>
+        {log.map((deal) => (
+          <section key={deal.deal}>
+            <h3>Раздача {deal.deal}</h3>
+            <ol>
+              {deal.lines.map((item, index) => {
+                const who =
+                  item.seat === null
+                    ? null
+                    : playerName(item.seat, viewer, names);
+                return (
+                  <li key={`${deal.deal}:${item.step}:${index}`}>
+                    {who === null ? null : `${who}: `}
+                    <SpeechWord word={item.word} />
+                  </li>
+                );
+              })}
+            </ol>
+          </section>
+        ))}
+      </div>
+    </aside>
+  );
+}
+
+const SUIT_WORDS = [
+  ["без козыря", "noTrump"],
+  ["пик", "spades"],
+  ["треф", "clubs"],
+  ["бубен", "diamonds"],
+  ["червей", "hearts"],
+] as const;
+
+function SpeechWord({ word }: { word: string }): React.JSX.Element {
+  const suit = SUIT_WORDS.find(([name]) => word.includes(name));
+  if (suit === undefined) {
+    return <>{word}</>;
+  }
+  return (
+    <>
+      {word}
+      <span
+        className={
+          isRedSuit(suit[1]) ? "speech-suit speech-suit-red" : "speech-suit"
+        }
+      >
+        {suitSymbol(suit[1])}
+      </span>
+    </>
+  );
+}
+
+function speechEntries(state: GameSnapshot): SpeechDeal[] {
+  if (state.speechLog !== undefined) {
+    return state.speechLog;
+  }
+  const lines = state.speech ?? [];
+  if (lines.length === 0) {
+    return [];
+  }
+  return [{ deal: state.dealNumber + 1, lines }];
 }
 
 function facedTalonCaption(): string {
@@ -2174,6 +2620,12 @@ function facedTalonCaption(): string {
 }
 
 function actionLabel(action: GameAction): string {
+  if (action.type === "propose" && action.tricks !== undefined) {
+    return `моих ${action.tricks}`;
+  }
+  if (action.type === "proposal") {
+    return action.answer === "agree" ? "Согласен" : "Не согласен";
+  }
   if (action.type === "throwTalon") {
     return "Бросить прикуп в лицо";
   }

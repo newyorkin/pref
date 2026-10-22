@@ -5,6 +5,7 @@ import {
 } from "react";
 
 import { GameTable } from "./GameTable.js";
+import { DisplayProfileProvider, ProfileMenu } from "./profile.js";
 import "./auth.css";
 
 export interface TableSettings {
@@ -355,7 +356,7 @@ type AuthMode = "login" | "register";
 function AuthForm({
   onAuthenticated,
 }: {
-  onAuthenticated: (playerName: string) => void;
+  onAuthenticated: (player: { id: number; name: string }) => void;
 }): React.JSX.Element {
   const [mode, setMode] = useState<AuthMode>("login");
   const [name, setName] = useState("");
@@ -406,12 +407,14 @@ function AuthForm({
         setError("Неверное имя или пароль");
         return;
       }
-      const user = (await login.json()) as { name?: unknown };
-      onAuthenticated(
-        typeof user.name === "string" && user.name.length > 0
-          ? user.name
-          : trimmedName,
-      );
+      const user = (await login.json()) as { id?: unknown; name?: unknown };
+      onAuthenticated({
+        id: typeof user.id === "number" ? user.id : 0,
+        name:
+          typeof user.name === "string" && user.name.length > 0
+            ? user.name
+            : trimmedName,
+      });
     } catch {
       setError("Нет связи с сервером");
     } finally {
@@ -895,6 +898,7 @@ function TableLobby({ tableId }: { tableId: string }): React.JSX.Element {
 export default function App(): React.JSX.Element {
   const [authenticated, setAuthenticated] = useState<boolean | null>(null);
   const [playerName, setPlayerName] = useState<string | null>(null);
+  const [playerId, setPlayerId] = useState<number | null>(null);
   const [createdTable, setCreatedTable] = useState<TableInfo | null>(null);
   const tableId = window.location.pathname.match(
     /^\/table\/([a-f0-9]+)$/,
@@ -907,7 +911,8 @@ export default function App(): React.JSX.Element {
         setAuthenticated(false);
         return;
       }
-      const user = (await response.json()) as { name?: unknown };
+      const user = (await response.json()) as { id?: unknown; name?: unknown };
+      setPlayerId(typeof user.id === "number" ? user.id : null);
       setPlayerName(
         typeof user.name === "string" && user.name.length > 0
           ? user.name
@@ -926,9 +931,10 @@ export default function App(): React.JSX.Element {
     );
   } else if (!authenticated) {
     screen = (
-      <AuthForm
-        onAuthenticated={(name) => {
-          setPlayerName(name);
+        <AuthForm
+        onAuthenticated={(player) => {
+          setPlayerName(player.name);
+          setPlayerId(player.id);
           setAuthenticated(true);
         }}
       />
@@ -942,18 +948,22 @@ export default function App(): React.JSX.Element {
   }
 
   return (
-    <>
+    <DisplayProfileProvider playerId={playerId}>
       {authenticated === true ? (
-        <LogoutButton
-          playerName={playerName}
-          onLogout={() => {
-            setPlayerName(null);
-            setAuthenticated(false);
-          }}
-        />
+        <div className="player-bar">
+          <ProfileMenu />
+          <LogoutButton
+            playerName={playerName}
+            onLogout={() => {
+              setPlayerName(null);
+              setPlayerId(null);
+              setAuthenticated(false);
+            }}
+          />
+        </div>
       ) : null}
       {screen}
-    </>
+    </DisplayProfileProvider>
   );
 }
 
@@ -985,12 +995,10 @@ export function LogoutButton({
       type="button"
       className="logout"
       disabled={pending}
+      title={playerName === null ? undefined : `${playerName} сбегает`}
       onClick={() => void logout()}
     >
       <span className="logout-label">Выйти</span>
-      {playerName === null ? null : (
-        <span className="logout-name">{playerName}</span>
-      )}
     </button>
   );
 }

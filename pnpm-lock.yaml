@@ -38,6 +38,9 @@ importers:
 
   packages/web:
     dependencies:
+      '@pref/engine':
+        specifier: workspace:*
+        version: link:../engine
       react:
         specifier: ^19.2.0
         version: 19.3.1
