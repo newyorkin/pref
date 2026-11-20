@@ -82,10 +82,16 @@ function confirmOrder(state: GameState): GameState {
   throw new Error("no contract to order");
 }
 
-function orderedContract(level: 6 | 7 | 8, raspasIndex = 0): GameState {
+function orderedContract(
+  level: 6 | 7 | 8,
+  raspasIndex = 0,
+  raspasExit: GameState["settings"]["raspasExit"] = settings.raspasExit,
+  trump: Trump = "spades",
+  confirm = true,
+): GameState {
   const card = (suit: Suit, rank: Card["rank"]): Card => ({ suit, rank });
   let state: GameState = {
-    settings: { ...settings, bulletTarget: 10 },
+    settings: { ...settings, raspasExit, bulletTarget: 10 },
     phase: "auction",
     seed: 1,
     dealNumber: 0,
@@ -109,20 +115,101 @@ function orderedContract(level: 6 | 7 | 8, raspasIndex = 0): GameState {
     type: "auction",
     action: {
       type: "bid",
-      bid: { type: "contract", level, trump: "spades" },
+      bid: { type: "contract", level, trump },
     },
   });
   state = act(state, 1, { type: "auction", action: { type: "pass" } });
   state = act(state, 2, { type: "auction", action: { type: "pass" } });
-  return confirmOrder(
-    act(state, 0, {
-      type: "discard",
-      cards: [card("clubs", 8), card("clubs", 7)],
-    }),
-  );
+  const ready = act(state, 0, {
+    type: "discard",
+    cards: [card("clubs", 8), card("clubs", 7)],
+  });
+  return confirm ? confirmOrder(ready) : ready;
 }
 
 describe("complete game state", () => {
+  test("the raspas log identifies later rounds and their multiplier", () => {
+    let state = createGame(
+      { ...settings, bulletTarget: 10 },
+      42,
+      createBulletScore(),
+      1,
+    );
+    state = act(state, 0, { type: "auction", action: { type: "pass" } });
+    state = act(state, 1, { type: "auction", action: { type: "pass" } });
+    state = act(state, 2, { type: "auction", action: { type: "pass" } });
+
+    expect(gameView(state, 0).speech.map((line) => line.word)).toContain(
+      "вторые распасы (множитель 2)",
+    );
+  });
+
+  test("the 677 setting requires at least seven to order after raspas", () => {
+    const state = orderedContract(6, 1, "677", "spades", false);
+    const actions = gameView(state, 0).allowedActions;
+    expect(
+      actions.some(
+        (action) => action.type === "order" && action.bid.type === "contract" && action.bid.level === 6,
+      ),
+    ).toBe(false);
+    expect(actions).toContainEqual({
+      type: "order",
+      bid: { type: "contract", level: 7, trump: "spades" },
+    });
+
+    const six = applyGameAction(state, 0, {
+      type: "order",
+      bid: { type: "contract", level: 6, trump: "spades" },
+    });
+    expect(six.accepted).toBe(false);
+
+    const seven = applyGameAction(state, 0, {
+      type: "order",
+      bid: { type: "contract", level: 7, trump: "spades" },
+    });
+    expect(seven.accepted).toBe(true);
+  });
+
+  test("666 allows six and 678678 raises the minimum in a loop", () => {
+    const noRaisedFloor = orderedContract(6, 3, "666", "spades", false);
+    expect(gameView(noRaisedFloor, 0).allowedActions).toContainEqual({
+      type: "order",
+      bid: { type: "contract", level: 6, trump: "spades" },
+    });
+
+    const levels = [0, 1, 2, 3, 4, 5].map((index) =>
+      orderedContract(6, index, "678678", "spades", false).raspasIndex,
+    );
+    expect(levels).toEqual([0, 1, 2, 3, 4, 5]);
+    const thirdRound = orderedContract(6, 2, "678678", "spades", false);
+    expect(
+      gameView(thirdRound, 0).allowedActions.some(
+        (action) => action.type === "order" && action.bid.type === "contract" && action.bid.level === 6,
+      ),
+    ).toBe(false);
+    const fourthRound = orderedContract(6, 3, "678678", "spades", false);
+    expect(gameView(fourthRound, 0).allowedActions).toContainEqual({
+      type: "order",
+      bid: { type: "contract", level: 6, trump: "spades" },
+    });
+  });
+
+  test("the six-diamond joke is a system line only after the final order", () => {
+    const joke = "кто играет шесть бубён - тот бывает наебён";
+    let state = orderedContract(6, 0, "666", "diamonds", false);
+    expect(gameView(state, 0).speech.map((line) => line.word)).not.toContain(joke);
+    state = act(state, 0, {
+      type: "order",
+      bid: { type: "contract", level: 6, trump: "diamonds" },
+    });
+    expect(gameView(state, 0).speech).toContainEqual(
+      expect.objectContaining({ seat: null, word: joke }),
+    );
+    expect(gameView(state, 0).speech).toContainEqual(
+      expect.objectContaining({ seat: 0, word: "6 бубен" }),
+    );
+  });
+
   test("shows the lead card to every seat and keeps the seat view repeatable", () => {
     let state = createGame(settings, 42);
     state = act(state, 0, {
@@ -482,6 +569,9 @@ describe("complete game state", () => {
     expect(gameView(state, 0).speech.map((line) => line.word)).toContain(
       "туз в пулю",
     );
+    expect(gameView(state, 0).speech.map((line) => line.word)).toContain(
+      "за туза, попрошу записать 1 в пульку",
+    );
     expect(state.score.mountain).toEqual([0, 0, 0]);
     expect(state.score.last.bullet).toEqual([0, 0, 1]);
     expect(state.talon?.hands[0]).toEqual([...original, ...talon]);
@@ -518,6 +608,9 @@ describe("complete game state", () => {
     expect(state.score.bullet).toEqual([0, 0, 2]);
     expect(gameView(state, 0).speech.map((line) => line.word)).toContain(
       "два туза в пулю",
+    );
+    expect(gameView(state, 0).speech.map((line) => line.word)).toContain(
+      "за тузов, попрошу записать 2 в пульку",
     );
 
     state = act(state, 0, { type: "throwTalon" });
@@ -751,6 +844,10 @@ describe("complete game state", () => {
     expect(gameView(state, 2).turn).toBe(2);
     expect(gameView(state, 1).allowedActions).toEqual([]);
     expect(gameView(state, 2).allowedActions).toEqual([
+      ...[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((tricks) => ({
+        type: "propose" as const,
+        tricks,
+      })),
       { type: "playCard", card: card("hearts", 7) },
     ]);
 
@@ -1364,6 +1461,10 @@ describe("complete game state", () => {
       { seat: 1, card: card("diamonds", 8) },
     ]);
     expect(gameView(state, 2).allowedActions).toEqual([
+      ...[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((tricks) => ({
+        type: "propose" as const,
+        tricks,
+      })),
       { type: "playCard", card: card("clubs", 7) },
       { type: "playCard", card: card("diamonds", 7) },
     ]);
@@ -1757,7 +1858,7 @@ describe("complete game state", () => {
     state = act(state, 2, { type: "defense", action: { type: "whist" } });
     expect(state.phase).toBe("play");
     expect(gameView(state, 0).allowedActions).toEqual([
-      ...[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((tricks) => ({
+      ...[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((tricks) => ({
         type: "propose" as const,
         tricks,
       })),
@@ -1770,23 +1871,17 @@ describe("complete game state", () => {
       ),
     ).toBe(false);
 
-    const low = applyGameAction(state, 0, { type: "propose", tricks: 0 });
+    const low = applyGameAction(state, 0, { type: "propose", tricks: 11 });
     expect(low.accepted).toBe(false);
     expect(low.reason).toBe("invalidProposal");
-    const stranger = applyGameAction(state, 2, { type: "propose", tricks: 6 });
+    const stranger = applyGameAction(state, 1, { type: "propose", tricks: 6 });
     expect(stranger.accepted).toBe(false);
     expect(stranger.reason).toBe("notYourTurn");
 
     state = act(state, 0, { type: "propose", tricks: 6 });
     expect(currentWords(state)).toEqual({ 0: "6 запишем?" });
-    expect(gameView(state, 1).shownHands[0]).toEqual([
-      card("spades", 14),
-      card("clubs", 9),
-    ]);
-    expect(gameView(state, 2).shownHands[0]).toEqual([
-      card("spades", 14),
-      card("clubs", 9),
-    ]);
+    expect(gameView(state, 1).shownHands[0]).toBeNull();
+    expect(gameView(state, 2).shownHands[0]).toBeNull();
     expect(gameView(state, 0).shownHands[0]).toBeNull();
     expect(gameView(state, 1).allowedActions).toEqual([
       { type: "proposal", answer: "agree" },

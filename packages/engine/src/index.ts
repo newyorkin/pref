@@ -70,6 +70,7 @@ export {
 } from "./scoring.js";
 export {
   nextRaspasIndex,
+  raspasMinimumOrderLevel,
   raspasMultiplier,
   type ContractLevel,
   type DealOutcome,

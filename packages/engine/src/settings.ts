@@ -59,10 +59,14 @@ export function nextRaspasIndex(
     return 0;
   }
 
-  return outcome.level >= exitLevel(raspasExit, index) ? 0 : index;
+  return outcome.level >= raspasMinimumOrderLevel(raspasExit, index) ? 0 : index;
 }
 
-function exitLevel(raspasExit: RaspasExit, index: number): 6 | 7 | 8 {
+export function raspasMinimumOrderLevel(
+  raspasExit: RaspasExit,
+  index: number,
+): 6 | 7 | 8 {
+  assertIndex(index);
   const levels = RASPAS_EXIT_LEVELS[raspasExit];
   const position =
     raspasExit === "678678"

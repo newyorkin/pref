@@ -8,7 +8,10 @@ import {
   BulletSheet,
   createActionId,
   GameSnapshotPanel,
+  LayoutDialog,
   LayoutSheet,
+  cornerBoxSize,
+  fitLayoutScale,
   nextClientState,
   resultsText,
   type GameSnapshot,
@@ -68,10 +71,10 @@ describe("table form", () => {
     expect(markup).toContain('<option value="677"');
     expect(markup).toContain('<option value="788"');
     expect(markup).toContain('<option value="678678"');
-    expect(markup).toContain(">6, 6, 6</option>");
-    expect(markup).toContain(">6, 7, 7</option>");
-    expect(markup).toContain(">6, 7, 8, 8…</option>");
-    expect(markup).toContain(">6, 7, 8, 6, 7, 8…</option>");
+    expect(markup).toContain(">Шестерной</option>");
+    expect(markup).toContain(">Семерной</option>");
+    expect(markup).toContain(">Семерной, а потом восьмерной</option>");
+    expect(markup).toContain(">7 → 8 → 6 -&gt; 7 ...</option>");
     expect(markup).not.toContain("выключен");
     expect(markup).not.toContain('name="firstLead"');
     expect(markup).toContain("Первый ход в тёмную");
@@ -1395,6 +1398,54 @@ describe("table form", () => {
     expect(sheet).toContain("Борис · 3 взятки");
     expect(sheet).toContain("Вера · 1 взятка");
 
+    const dialog = renderToStaticMarkup(
+      <LayoutDialog
+        viewer={0}
+        names={["Анна", "Борис", "Вера"]}
+        onClose={() => undefined}
+        layout={{
+          hands: [[{ suit: "hearts", rank: 14 }], [], []],
+          talon: [],
+          discarded: [],
+          tricks: [6, 3, 1],
+        }}
+      />,
+    );
+    expect(dialog).toContain('aria-label="Расклад"');
+    expect(dialog).toContain('aria-label="Размер расклада"');
+    expect(dialog).toContain("deal-log-resize deal-log-resize-xy");
+    expect(dialog).toContain(">Закрыть</button>");
+
+    const limits = {
+      minWidth: 280,
+      maxWidth: 900,
+      minHeight: 200,
+      maxHeight: 700,
+    };
+    expect(
+      cornerBoxSize(
+        { x: 40, y: 80, width: 480, height: 360 },
+        { x: 90, y: 30 },
+        limits,
+      ),
+    ).toEqual({ width: 530, height: 410 });
+    expect(
+      cornerBoxSize(
+        { x: 40, y: 80, width: 480, height: 360 },
+        { x: -200, y: 400 },
+        limits,
+      ),
+    ).toEqual({ width: 280, height: 200 });
+    expect(
+      fitLayoutScale({ width: 800, height: 400 }, { width: 900, height: 700 }),
+    ).toBe(1);
+    expect(
+      fitLayoutScale({ width: 800, height: 400 }, { width: 400, height: 700 }),
+    ).toBe(0.5);
+    expect(
+      fitLayoutScale({ width: 800, height: 400 }, { width: 900, height: 200 }),
+    ).toBe(0.5);
+
     const misere = panel({
       ...base,
       phase: "order",
@@ -1464,12 +1515,16 @@ describe("table form", () => {
 
     const second = markup(2);
     expect(second).toContain(">Полвиста</button>");
+    expect(second).toContain(">Вист</button>");
+    expect(second).not.toContain(">Пас</button>");
     expect(second).toContain(">Прикуп</p>");
     expect(second).toContain('aria-label="8 ♣"');
     expect(second).toContain('aria-label="7 ♣"');
 
     const declarer = markup(0);
     expect(declarer).toContain(">Полвиста</button>");
+    expect(declarer).toContain(">Вист</button>");
+    expect(declarer).not.toContain(">Пас</button>");
     expect(declarer).not.toContain(">Прикуп</p>");
 
     const hidden = renderToStaticMarkup(
@@ -1492,6 +1547,8 @@ describe("table form", () => {
       />,
     );
     expect(hidden).not.toContain("Полвиста");
+    expect(hidden).toContain(">Вист</button>");
+    expect(hidden).toContain(">Пас</button>");
     expect(hidden).toContain(">Прикуп</p>");
 
     const ordered = renderToStaticMarkup(
@@ -1516,6 +1573,53 @@ describe("table form", () => {
       />,
     );
     expect(ordered).not.toContain(", прикуп");
+    expect(ordered).toContain("Ваш заказ");
+    expect(ordered).not.toContain("Ждём что скажет");
+
+    const waiting = renderToStaticMarkup(
+      <GameSnapshotPanel
+        seat={1}
+        playerNames={["anna@example.com", "Борис", "Вера"]}
+        settings={settings}
+        onAction={() => undefined}
+        snapshot={{
+          type: "snapshot",
+          tableId: "table",
+          version: 2,
+          state: {
+            ...state,
+            phase: "order",
+            allowedActions: [],
+          },
+        }}
+      />,
+    );
+    expect(waiting).toContain("Ждём что скажет anna");
+    expect(waiting).not.toContain("Ждём что скажет anna@example.com");
+    expect(waiting).not.toContain("Можно заказать");
+    expect(waiting).not.toContain("или старше");
+    expect(waiting).not.toContain("Закажите мизер");
+
+    const other = renderToStaticMarkup(
+      <GameSnapshotPanel
+        seat={2}
+        playerNames={["Анна", "Борис", "Вера"]}
+        settings={settings}
+        onAction={() => undefined}
+        snapshot={{
+          type: "snapshot",
+          tableId: "table",
+          version: 2,
+          state: {
+            ...state,
+            phase: "order",
+            allowedActions: [],
+          },
+        }}
+      />,
+    );
+    expect(other).toContain("Ждём что скажет Анна");
+    expect(other).not.toContain("Можно заказать");
 
     const playing = renderToStaticMarkup(
       <GameSnapshotPanel
@@ -1972,9 +2076,9 @@ describe("display profile", () => {
     };
     const offer = panel(0, base);
     expect(offer).toContain(">Моих</summary>");
-    expect(offer).toContain(">моих 3</button>");
-    expect(offer).toContain(">моих 10</button>");
-    expect(offer).not.toContain(">моих 2</button>");
+    expect(offer).toContain(">3</button>");
+    expect(offer).toContain(">10</button>");
+    expect(offer).not.toContain(">2</button>");
     expect(offer).not.toContain(">Согласен</button>");
 
     const reply = panel(2, {
@@ -2009,6 +2113,18 @@ describe("display profile", () => {
     expect(mobileBlock).toContain("height: 4.85rem");
     expect(mobileBlock).not.toContain("card-scale");
     expect(css).toContain("@media (min-width: 641px)");
+    const trick = css.slice(
+      css.indexOf("section.trick.trick-play {"),
+      css.indexOf("}", css.indexOf("section.trick.trick-play {")),
+    );
+    expect(trick).toContain("position: fixed");
+    expect(trick).toContain("left: 50%");
+    expect(trick).toContain("top: calc(50% - var(--table-foot) / 2)");
+    expect(trick).toContain("transform: translate(-50%, -50%)");
+    const desktop = css.slice(css.indexOf("@media (min-width: 641px)"));
+    expect(desktop).toContain(
+      "--table-foot: calc(7.4rem * var(--card-scale, 1))",
+    );
     const hand = css.slice(css.indexOf(".hand-seat {"), css.indexOf("}", css.indexOf(".hand-seat {")));
     expect(hand).toContain("position: fixed");
     expect(hand).toContain("bottom: 0");

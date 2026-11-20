@@ -1,6 +1,10 @@
 import { describe, expect, test } from "vitest";
 
-import { nextRaspasIndex, raspasMultiplier } from "./settings.js";
+import {
+  nextRaspasIndex,
+  raspasMinimumOrderLevel,
+  raspasMultiplier,
+} from "./settings.js";
 
 describe("raspasMultiplier", () => {
   test("111 stays at one", () => {
@@ -104,5 +108,33 @@ describe("nextRaspasIndex", () => {
 
   test("a taken misere resets the index", () => {
     expect(nextRaspasIndex(3, { type: "takenMisere" }, "788")).toBe(0);
+  });
+});
+
+describe("raspas minimum order level", () => {
+  test("666 has no raised minimum", () => {
+    expect([0, 1, 5].map((index) => raspasMinimumOrderLevel("666", index))).toEqual([
+      6, 6, 6,
+    ]);
+  });
+
+  test("677 requires seven after the first raspas round", () => {
+    expect([0, 1, 2, 5].map((index) => raspasMinimumOrderLevel("677", index))).toEqual([
+      6, 7, 7, 7,
+    ]);
+  });
+
+  test("788 means seven after the first, then eight", () => {
+    expect([0, 1, 2, 5].map((index) => raspasMinimumOrderLevel("788", index))).toEqual([
+      6, 7, 8, 8,
+    ]);
+  });
+
+  test("678678 repeats six, seven and eight as the minimum sequence", () => {
+    expect(
+      [0, 1, 2, 3, 4, 5].map((index) =>
+        raspasMinimumOrderLevel("678678", index),
+      ),
+    ).toEqual([6, 7, 8, 6, 7, 8]);
   });
 });

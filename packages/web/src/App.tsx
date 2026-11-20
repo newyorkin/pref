@@ -39,10 +39,10 @@ const PROGRESSION_LABEL: Record<
 };
 
 const EXIT_LABEL: Record<TableSettings["raspasExit"], string> = {
-  "666": "6, 6, 6",
-  "677": "6, 7, 7",
-  "788": "6, 7, 8, 8…",
-  "678678": "6, 7, 8, 6, 7, 8…",
+  "666": "Шестерной",
+  "677": "Семерной",
+  "788": "Семерной, а потом восьмерной",
+  "678678": "7 → 8 → 6 -> 7 ...",
 };
 
 function copyWithField(url: string): boolean {
@@ -377,6 +377,10 @@ function AuthForm({
       setError("Введите имя и пароль");
       return;
     }
+    if (mode === "register" && !strongPassword(password)) {
+      setError("Пароль должен быть не короче 8 символов и содержать цифру и символ");
+      return;
+    }
 
     setPending(true);
     setError(null);
@@ -485,6 +489,7 @@ function AuthForm({
                 id="auth-password"
                 name="password"
                 type={passwordVisible ? "text" : "password"}
+                minLength={mode === "register" ? 8 : undefined}
                 autoComplete={
                   mode === "register" ? "new-password" : "current-password"
                 }
@@ -515,6 +520,10 @@ function AuthForm({
       </div>
     </section>
   );
+}
+
+function strongPassword(password: string): boolean {
+  return password.length >= 8 && /\d/.test(password) && /[^\p{L}\p{N}]/u.test(password);
 }
 
 function mergeTable(

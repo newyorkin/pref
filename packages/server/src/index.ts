@@ -315,6 +315,14 @@ export class GameServer {
 
       const name = body.name.trim();
       if (pathname === "/register") {
+        if (
+          body.password.length < 8 ||
+          !/\d/.test(body.password) ||
+          !/[^\p{L}\p{N}]/u.test(body.password)
+        ) {
+          this.sendJson(response, 400, { error: "weakPassword" });
+          return;
+        }
         const existing = this.database
           .prepare("SELECT id FROM users WHERE name = ?")
           .get(name);
@@ -1141,7 +1149,7 @@ function isGameAction(value: unknown): value is GameAction {
   if (value.type === "propose") {
     return (
       Number.isInteger(value.tricks) &&
-      (value.tricks as number) >= 1 &&
+      (value.tricks as number) >= 0 &&
       (value.tricks as number) <= 10
     );
   }

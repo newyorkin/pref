@@ -6,12 +6,13 @@
   --gold: #c4a574;
   --green: #1b4d38;
   --suit-red: #9d3a3a;
+  --table-foot: 8.2rem;
   box-sizing: border-box;
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
   gap: 0.9rem;
-  padding: 1.1rem 1.15rem 8.2rem 1.15rem;
+  padding: 1.1rem 1.15rem var(--table-foot) 1.15rem;
   color: #f3ecdf;
   color-scheme: dark;
   background-color: #10281f;
@@ -814,6 +815,19 @@ button.pc {
   gap: 0.7rem;
 }
 
+.prikup .pc {
+  width: 2.35rem;
+  height: 3.35rem;
+}
+
+.prikup.raspas-prikup {
+  position: fixed;
+  z-index: 3;
+  left: 50%;
+  top: calc(50% - var(--table-foot) / 2 - 5.5rem);
+  transform: translate(-50%, -50%);
+}
+
 .prikup-back {
   width: 3.4rem;
   height: 4.8rem;
@@ -827,10 +841,13 @@ span.prikup-back {
 }
 
 .layout-dialog {
+  position: relative;
+  display: flex;
+  flex-direction: column;
   width: min(52rem, 100%);
   max-height: calc(100dvh - 2.4rem);
-  overflow: auto;
-  padding: 0.8rem 0.9rem 1rem;
+  overflow: hidden;
+  padding: 1rem;
   border: 1px solid rgba(196, 165, 116, 0.7);
   border-radius: 0.4rem;
   background: #f7f3ea;
@@ -838,9 +855,40 @@ span.prikup-back {
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
 }
 
+.layout-dialog .bullet-close {
+  flex: 0 0 auto;
+}
+
+.layout-view {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: flex-start;
+}
+
+.layout-scale {
+  flex: 0 0 auto;
+}
+
+.layout-fit {
+  width: max-content;
+  transform-origin: top left;
+}
+
 .layout-board {
   display: grid;
   gap: 0.85rem;
+}
+
+.layout-dialog .layout-board {
+  width: max-content;
+}
+
+.layout-dialog .layout-hand {
+  flex-wrap: nowrap;
 }
 
 .layout-board h2 {
@@ -886,15 +934,22 @@ span.prikup-back {
 }
 
 .trick-play {
-  --trick-w: 3.4rem;
-  --trick-h: 4.8rem;
-  --trick-gap: 0.7rem;
-  --trick-lift: 2.2rem;
-  position: relative;
+  --trick-w: calc(3.4rem * var(--card-scale, 1));
+  --trick-h: calc(4.8rem * var(--card-scale, 1));
+  --trick-gap: calc(0.7rem * var(--card-scale, 1));
+  --trick-lift: calc(2.2rem * var(--card-scale, 1));
+}
+
+section.trick.trick-play {
+  position: fixed;
+  z-index: 4;
+  left: 50%;
+  top: calc(50% - var(--table-foot) / 2);
   display: block;
   width: calc(var(--trick-w) * 2 + var(--trick-gap));
   height: calc(var(--trick-h) + var(--trick-lift));
-  margin: 0.2rem auto;
+  margin: 0;
+  transform: translate(-50%, -50%);
 }
 
 .trick-play .pc,
@@ -1090,7 +1145,8 @@ span.prikup-back {
   opacity: 0.45;
 }
 
-.bullet-backdrop {
+.bullet-backdrop,
+.bullet-dialog-backdrop {
   position: fixed;
   inset: 0;
   z-index: 40;
@@ -1101,14 +1157,33 @@ span.prikup-back {
 }
 
 .bullet-dialog {
+  position: relative;
+  display: flex;
+  flex-direction: column;
   width: min(40rem, 100%);
+  height: min(80dvh, 44rem);
   max-height: calc(100dvh - 2.4rem);
-  overflow: auto;
+  overflow: hidden;
   padding: 0.8rem 0.9rem 1rem;
   border: 1px solid var(--gold);
   border-radius: 0.4rem;
   background: var(--paper);
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+}
+
+.bullet-dialog .bullet-close {
+  flex: 0 0 auto;
+}
+
+.bullet-dialog .bullet-view {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
+}
+
+.bullet-dialog .deal-log-resize-xy {
+  top: 0;
+  right: 0;
 }
 
 .bullet-close {
@@ -1520,7 +1595,7 @@ span.prikup-back {
   }
 
   .game-screen {
-    padding-bottom: calc(7.4rem * var(--card-scale, 1));
+    --table-foot: calc(7.4rem * var(--card-scale, 1));
   }
 
   .game-has-discard .corner-tools {
@@ -1612,6 +1687,11 @@ span.prikup-back {
 
   .prikup-back,
   .trick-back {
+    width: calc(3.4rem * var(--card-scale, 1));
+    height: calc(4.8rem * var(--card-scale, 1));
+  }
+
+  .prikup .pc {
     width: calc(3.4rem * var(--card-scale, 1));
     height: calc(4.8rem * var(--card-scale, 1));
   }

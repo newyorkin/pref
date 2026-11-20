@@ -35,6 +35,7 @@ import {
 } from "./tricks.js";
 import {
   nextRaspasIndex,
+  raspasMinimumOrderLevel,
   raspasMultiplier,
   type TableSettings,
 } from "./settings.js";
@@ -69,6 +70,7 @@ export type GameAction =
 
 export interface Proposal {
   readonly tricks: number;
+  readonly proposer: Seat;
   readonly answers: readonly [
     "agree" | "decline" | null,
     "agree" | "decline" | null,
@@ -232,7 +234,7 @@ export function applyGameAction(
     if (auctionResult.type === "raspas") {
       return accept({
         ...voiced,
-        ...withSpeech(voiced, null, "распасы", false),
+        ...withSpeech(voiced, null, raspasCallWord(voiced), false),
         phase: "raspas",
         auction: transition.state,
         auctionResult,
@@ -247,11 +249,23 @@ export function applyGameAction(
       ...voiced,
       ...advanceSpeech(voiced),
     };
-    const ace = talonAceWord(bulletGain(voiced.score, score));
+    const aceCount =
+      voiced.settings.throwTalon && auctionResult.type === "contract"
+        ? voiced.dealtCards.talon.filter((card) => card.rank === 14).length
+        : 0;
+    const ace = talonAceWord(aceCount);
     const noted =
       ace === null
         ? quiet
-        : { ...quiet, ...withSpeech(quiet, null, ace, true) };
+        : {
+            ...quiet,
+            ...withSpeech(
+              withSpeech(quiet, null, ace, true),
+              ((state.dealNumber + 2) % 3) as Seat,
+              talonAceRequest(aceCount),
+              false,
+            ),
+          };
     return accept({
       ...noted,
       phase: "discard",
@@ -309,7 +323,7 @@ export function applyGameAction(
     if (seat !== state.auctionResult.declarer) {
       return reject(state, "notYourTurn");
     }
-    if (!isLegalOrder(state.auctionResult, action.bid)) {
+    if (!isLegalOrder(state, action.bid)) {
       return reject(state, "bidNotHigher");
     }
     const auctionResult =
@@ -322,9 +336,15 @@ export function applyGameAction(
             trump: action.bid.trump,
           };
     const auction = { ...state.auction, result: auctionResult };
+    const bidSpeech =
+      action.bid.type === "contract" &&
+      action.bid.level === 6 &&
+      action.bid.trump === "diamonds"
+        ? speechForSixDiamondsOrder(state, seat, action.bid)
+        : withSpeech(state, seat, bidWord(action.bid), true);
     const voiced = {
       ...state,
-      ...withSpeech(state, seat, bidWord(action.bid), true),
+      ...bidSpeech,
     };
     if (auctionResult.type === "misere") {
       if ((state.misereCalls ?? 0) < 1) {
@@ -749,7 +769,7 @@ function allowedGameActions(
     state.auctionResult.declarer === seat
   ) {
     const result = state.auctionResult;
-    const orders = BID_LADDER.filter((bid) => isLegalOrder(result, bid)).map(
+    const orders = BID_LADDER.filter((bid) => isLegalOrder(state, bid)).map(
       (bid) => ({ type: "order" as const, bid }),
     );
     return result.type === "contract"
@@ -826,25 +846,37 @@ function allowedGameActions(
 }
 
 function proposalAvailable(state: GameState): boolean {
+  const misere = state.auctionResult?.type === "misere";
   return (
     state.phase === "play" &&
     state.play !== null &&
     state.proposal == null &&
-    state.auctionResult?.type === "contract" &&
-    state.defense?.whistlers.length === 1 &&
+    (state.auctionResult?.type === "contract" || state.auctionResult?.type === "misere") &&
+    (misere || state.defense?.whistlers.length === 1) &&
+    (misere || state.defense?.whistStyle !== "dark") &&
     !styleChoiceDue(state)
   );
 }
 
+function proposalSeat(state: GameState, seat: Seat): boolean {
+  if (state.auctionResult?.type === "misere") {
+    return true;
+  }
+  return state.auctionResult?.type === "contract" &&
+    (seat === state.auctionResult.declarer || state.defense?.whistlers.includes(seat) === true);
+}
+
 function proposalOffers(state: GameState, seat: Seat): readonly GameAction[] {
-  if (!proposalAvailable(state) || state.auctionResult?.type !== "contract") {
+  if (!proposalAvailable(state) || state.auctionResult == null || state.auctionResult.type === "raspas") {
     return [];
   }
-  if (seat !== state.auctionResult.declarer || state.play === null) {
+  if (!proposalSeat(state, seat) || state.play === null) {
     return [];
   }
-  const floor = Math.max(1, state.play.tricksWon[seat]);
   const offers: GameAction[] = [];
+  const floor = state.auctionResult.type === "misere"
+    ? 0
+    : state.play.tricksWon[state.auctionResult.declarer];
   for (let tricks = floor; tricks <= 10; tricks += 1) {
     offers.push({ type: "propose", tricks });
   }
@@ -855,8 +887,8 @@ function proposalReplies(state: GameState, seat: Seat): readonly GameAction[] {
   const proposal = state.proposal;
   if (
     proposal == null ||
-    state.auctionResult?.type !== "contract" ||
-    seat === state.auctionResult.declarer ||
+    state.auctionResult === null ||
+    seat === proposal?.proposer ||
     proposal.answers[seat] !== null
   ) {
     return [];
@@ -872,20 +904,22 @@ function offerProposal(
   seat: Seat,
   tricks: number,
 ): GameTransition {
-  if (!proposalAvailable(state) || state.auctionResult?.type !== "contract") {
+  if (!proposalAvailable(state) || state.auctionResult == null || state.auctionResult.type === "raspas") {
     return reject(state, "invalidPhase");
   }
-  if (seat !== state.auctionResult.declarer) {
+  if (!proposalSeat(state, seat)) {
     return reject(state, "notYourTurn");
   }
-  const floor = Math.max(1, state.play?.tricksWon[seat] ?? 0);
+  const floor = state.auctionResult.type === "misere"
+    ? 0
+    : state.play?.tricksWon[state.auctionResult.declarer] ?? 0;
   if (!Number.isInteger(tricks) || tricks < floor || tricks > 10) {
     return reject(state, "invalidProposal");
   }
   return accept({
     ...state,
-    ...withSpeech(state, seat, `${tricks} запишем?`, true),
-    proposal: { tricks, answers: [null, null, null] },
+    ...withSpeech(state, seat, state.auctionResult.declarer === seat ? `${tricks} запишем?` : `отдаём ${tricks}?`, true),
+    proposal: { tricks, proposer: seat, answers: [null, null, null] },
   });
 }
 
@@ -897,8 +931,8 @@ function answerProposal(
   const proposal = state.proposal;
   if (
     proposal == null ||
-    state.auctionResult?.type !== "contract" ||
-    seat === state.auctionResult.declarer ||
+    state.auctionResult === null ||
+    seat === proposal?.proposer ||
     proposal.answers[seat] !== null
   ) {
     return reject(state, "notYourTurn");
@@ -918,11 +952,10 @@ function answerProposal(
   const voiced: GameState = {
     ...state,
     ...withSpeech(state, seat, "согласен", false),
-    proposal: { tricks: proposal.tricks, answers },
+    proposal: { tricks: proposal.tricks, proposer: proposal.proposer, answers },
   };
-  const declarer = state.auctionResult.declarer;
   const both = ([0, 1, 2] as const).every(
-    (place) => place === declarer || answers[place] === "agree",
+    (place) => place === proposal.proposer || answers[place] === "agree",
   );
   return accept(both ? finishProposal(voiced) : voiced);
 }
@@ -932,34 +965,36 @@ function finishProposal(state: GameState): GameState {
   const proposal = state.proposal;
   const whistler = state.defense?.whistlers[0];
   if (
-    auctionResult?.type !== "contract" ||
+    auctionResult == null || auctionResult.type === "raspas" ||
     proposal == null ||
-    whistler === undefined ||
+    (auctionResult.type === "contract" && whistler === undefined) ||
     state.play === null
   ) {
     throw new Error("Cannot record a proposal");
   }
   const tricks = [0, 0, 0] as [number, number, number];
-  tricks[auctionResult.declarer] = proposal.tricks;
-  tricks[whistler] = 10 - proposal.tricks;
+  const declarer = auctionResult.declarer;
+  tricks[declarer] = proposal.tricks;
+  const remainingTricks = 10 - proposal.tricks;
+  if (whistler !== undefined) {
+    tricks[whistler] = remainingTricks;
+  } else {
+    tricks[((declarer + 1) % 3) as Seat] = remainingTricks;
+  }
   const passer = state.defense?.defenders.find(
     (defender) => state.defense?.decisions[defender] === "pass",
   );
+  const scoreResult: ScoredDeal = auctionResult.type === "misere"
+    ? { type: "misere", declarer, tricks }
+    : { type: "contract", declarer, level: auctionResult.level, tricks, whistlers: [whistler!], ...(passer === undefined ? {} : { passer }) };
   return closeScoredDeal(
     {
       ...state,
       proposal: null,
       play: { ...state.play, result: tricks },
     },
-    {
-      type: "contract",
-      declarer: auctionResult.declarer,
-      level: auctionResult.level,
-      tricks,
-      whistlers: [whistler],
-      ...(passer === undefined ? {} : { passer }),
-    },
-    proposal.tricks >= auctionResult.level,
+    scoreResult,
+    auctionResult.type === "misere" ? proposal.tricks === 0 : proposal.tricks >= auctionResult.level,
   );
 }
 
@@ -968,21 +1003,9 @@ function proposedHands(
   state: GameState,
   viewer: Seat,
 ): GameSeatView["shownHands"] {
-  if (
-    state.proposal == null ||
-    state.play === null ||
-    state.auctionResult?.type !== "contract" ||
-    viewer === state.auctionResult.declarer
-  ) {
-    return hands;
-  }
-  const declarer = state.auctionResult.declarer;
-  const hand = state.play.hands[declarer];
-  return [
-    declarer === 0 ? hand : hands[0],
-    declarer === 1 ? hand : hands[1],
-    declarer === 2 ? hand : hands[2],
-  ];
+  void state;
+  void viewer;
+  return hands;
 }
 
 function finishDeal(state: GameState): GameState {
@@ -1221,6 +1244,29 @@ function talonAceWord(written: number): string | null {
   return null;
 }
 
+function talonAceRequest(aces: number): string {
+  return aces === 1
+    ? "за туза, попрошу записать 1 в пульку"
+    : "за тузов, попрошу записать 2 в пульку";
+}
+
+function raspasCallWord(state: GameState): string {
+  if (state.raspasIndex === 0) {
+    return "распасы";
+  }
+  const ordinal =
+    state.raspasIndex === 1
+      ? "вторые"
+      : state.raspasIndex === 2
+        ? "третьи"
+        : `${state.raspasIndex + 1}-е`;
+  const multiplier = raspasMultiplier(
+    state.settings.raspasProgression,
+    state.raspasIndex,
+  );
+  return `${ordinal} распасы (множитель ${multiplier})`;
+}
+
 function openedTalonScore(
   state: GameState,
   result: AuctionResult,
@@ -1267,28 +1313,39 @@ function continueAfterDiscard(
   };
 }
 
-function orderFloor(result: Exclude<AuctionResult, { type: "raspas" }>): Bid {
+function orderFloor(state: GameState): Bid | null {
+  const result = state.auctionResult;
+  if (result === null || result.type === "raspas") {
+    return null;
+  }
   if (result.type === "misere") {
     return { type: "misere" };
   }
-  return {
+  const raspasFloor = raspasMinimumOrderLevel(
+    state.settings.raspasExit,
+    state.raspasIndex,
+  );
+  const configuredFloor: Bid = {
     type: "contract",
-    level: result.level,
-    trump: result.trump,
+    level: Math.max(result.level, raspasFloor) as ContractLevel,
+    trump: raspasFloor > result.level ? "spades" : result.trump,
   };
+  return configuredFloor;
 }
 
-function isLegalOrder(
-  result: Exclude<AuctionResult, { type: "raspas" }>,
-  bid: Bid,
-): boolean {
+function isLegalOrder(state: GameState, bid: Bid): boolean {
+  const result = state.auctionResult;
+  if (result === null || result.type === "raspas") {
+    return false;
+  }
   if (result.type === "misere") {
     return bid.type === "misere";
   }
   if (bid.type === "misere") {
     return false;
   }
-  return bidRank(bid) >= bidRank(orderFloor(result));
+  const floor = orderFloor(state);
+  return floor !== null && bidRank(bid) >= bidRank(floor);
 }
 
 function withPlay(
@@ -1479,6 +1536,25 @@ function speechForAuction(
     return withSpeech(state, seat, "пас", false);
   }
   return withSpeech(state, seat, bidWord(action.bid), true);
+}
+
+function speechForSixDiamondsOrder(
+  state: GameState,
+  seat: Seat,
+  bid: Bid,
+): { speech: readonly TableSpeech[]; speechStep: number } {
+  const voiced = withSpeech(state, seat, bidWord(bid), true);
+  return {
+    ...voiced,
+    speech: [
+      ...voiced.speech,
+      {
+        seat: null,
+        word: "кто играет шесть бубён - тот бывает наебён",
+        step: voiced.speechStep,
+      },
+    ],
+  };
 }
 
 function defenseWord(action: DefenseAction): string {

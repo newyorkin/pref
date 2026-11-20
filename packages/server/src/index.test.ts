@@ -68,7 +68,7 @@ async function registerAndLogin(
   serverUrl: string,
   name: string,
 ): Promise<{ cookie: string; userId: number }> {
-  const credentials = { name, password: "secret" };
+  const credentials = { name, password: "Secret123!" };
   const registration = await fetch(`${serverUrl}/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -96,7 +96,7 @@ async function login(
   const response = await fetch(`${serverUrl}/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, password: "secret" }),
+    body: JSON.stringify({ name, password: "Secret123!" }),
   });
   expect(response.status).toBe(200);
   const user = (await response.json()) as { id: number };
