@@ -1,9 +1,4 @@
-import {
-  createHash,
-  randomBytes,
-  scryptSync,
-  timingSafeEqual,
-} from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import {
@@ -34,6 +29,7 @@ import {
 } from "@pref/engine";
 import WebSocket, { WebSocketServer } from "ws";
 import { secureDeal } from "./dealing.js";
+import { hashPassword, passwordMatches, hashToken, parseCookie, sessionCookie, encryptedRequest, allowedOrigin, addSessionExpiry, AuthRateLimiter, SESSION_TTL_MS } from "./auth.js";
 import { createTableSchema, loadTables, writeTable, cloneTable, type Table } from "./tables.js";
 
 export interface PlayCardCommand {
@@ -118,6 +114,10 @@ export interface GameServerOptions {
   readonly tableTtlMs?: number;
   readonly finishedTableTtlMs?: number;
   readonly cleanupIntervalMs?: number;
+  readonly sessionTtlMs?: number;
+  readonly cookieSecure?: boolean;
+  readonly publicOrigin?: string;
+  readonly authRateLimit?: { ip: number; name: number; windowMs: number };
 }
 
 export class GameServer {
@@ -133,9 +133,15 @@ export class GameServer {
   private readonly socketUsers = new Map<WebSocket, number>();
   private readonly staticDir: string | null;
   private readonly dealSource: () => Deal;
+  private readonly sessionTtlMs: number;
+  private readonly cookieSecure: boolean;
+  private readonly authLimiter: AuthRateLimiter;
 
   public constructor(options: GameServerOptions = {}) {
     this.dealSource = options.dealSource ?? secureDeal;
+    this.sessionTtlMs = options.sessionTtlMs ?? SESSION_TTL_MS;
+    this.cookieSecure = options.cookieSecure ?? process.env.COOKIE_SECURE === "1";
+    this.authLimiter = new AuthRateLimiter(options.authRateLimit);
     this.now = options.now ?? Date.now;
     this.tableTtlMs = options.tableTtlMs ?? 30 * 86_400_000;
     this.finishedTableTtlMs = options.finishedTableTtlMs ?? 7 * 86_400_000;
@@ -166,10 +172,15 @@ export class GameServer {
       )
     `);
 
+    addSessionExpiry(this.database);
     createTableSchema(this.database);
     this.tables = loadTables(this.database);
     this.pruneExpiredTables();
-    this.cleanupTimer = setInterval(() => this.pruneExpiredTables(), options.cleanupIntervalMs ?? 60_000);
+    this.cleanupTimer = setInterval(() => {
+      this.pruneExpiredTables();
+      this.database.prepare("DELETE FROM sessions WHERE expires_at <= ?").run(this.now());
+      this.authLimiter.prune(this.now());
+    }, options.cleanupIntervalMs ?? 60_000);
     this.cleanupTimer.unref();
 
     this.httpServer = createServer((request, response) => {
@@ -178,7 +189,16 @@ export class GameServer {
         else response.destroy();
       });
     });
-    this.socketServer = new WebSocketServer({ server: this.httpServer });
+    this.socketServer = new WebSocketServer({ noServer: true });
+    this.httpServer.on("upgrade", (request, socket, head) => {
+      if (!allowedOrigin(request, options.publicOrigin, this.cookieSecure)) {
+        socket.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n"); return;
+      }
+      if (this.authenticatedUser(request.headers.cookie) === null) {
+        socket.end("HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n"); return;
+      }
+      this.socketServer.handleUpgrade(request, socket, head, ws => this.socketServer.emit("connection", ws, request));
+    });
     this.socketServer.on("connection", (socket, request) => {
       const userId = this.authenticatedUser(request.headers.cookie);
       if (userId === null) {
@@ -187,6 +207,9 @@ export class GameServer {
       }
       this.socketUsers.set(socket, userId);
       socket.on("message", (data) => {
+        if (this.authenticatedUser(request.headers.cookie) === null) {
+          socket.close(1008, "Session expired"); return;
+        }
         try { this.handleMessage(socket, data.toString()); } catch {
           this.send(socket, { type: "rejected", reason: "internalError" });
         }
@@ -331,6 +354,10 @@ export class GameServer {
       }
 
       const name = body.name.trim();
+      if (!this.authLimiter.allow(request.socket.remoteAddress ?? "unknown", name, this.now())) {
+        response.setHeader("Retry-After", "60");
+        this.sendJson(response, 429, { error: "rateLimited" }); return;
+      }
       if (pathname === "/register") {
         if (
           body.password.length < 8 ||
@@ -351,10 +378,11 @@ export class GameServer {
         const salt = randomBytes(16).toString("hex");
         const result = this.database
           .prepare(`
-            INSERT INTO users (name, password_salt, password_hash)
+            INSERT OR IGNORE INTO users (name, password_salt, password_hash)
             VALUES (?, ?, ?)
           `)
-          .run(name, salt, hashPassword(body.password, salt));
+          .run(name, salt, await hashPassword(body.password, salt));
+        if (result.changes === 0) { this.sendJson(response, 409, { error: "nameTaken" }); return; }
         this.sendJson(response, 201, {
           id: Number(result.lastInsertRowid),
           name,
@@ -378,11 +406,11 @@ export class GameServer {
         | undefined;
       if (
         user === undefined ||
-        !passwordMatches(
+        !(await passwordMatches(
           body.password,
           user.password_salt,
           user.password_hash,
-        )
+        ))
       ) {
         this.sendJson(response, 401, { error: "invalidCredentials" });
         return;
@@ -391,12 +419,12 @@ export class GameServer {
       const token = randomBytes(32).toString("hex");
       this.database
         .prepare(
-          "INSERT INTO sessions (token_hash, user_id) VALUES (?, ?)",
+          "INSERT INTO sessions (token_hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)",
         )
-        .run(hashToken(token), user.id);
+        .run(hashToken(token), user.id, this.now(), this.now() + this.sessionTtlMs);
       response.setHeader(
         "Set-Cookie",
-        `session=${token}; HttpOnly; SameSite=Strict; Path=/`,
+        sessionCookie(token, this.cookieSecure || encryptedRequest(request), Math.floor(this.sessionTtlMs / 1000)),
       );
       this.sendJson(response, 200, { id: user.id, name: user.name });
       return;
@@ -411,13 +439,13 @@ export class GameServer {
       }
       response.setHeader(
         "Set-Cookie",
-        "session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0",
+        sessionCookie("", this.cookieSecure || encryptedRequest(request), 0),
       );
       this.sendJson(response, 200, { ok: true });
       return;
     }
 
-    const userId = this.authenticatedUser(request.headers.cookie);
+    const userId = this.authenticatedUser(request.headers.cookie, response, request);
     if (userId === null) {
       if (!isApiPath(pathname)) {
         if (await this.serveStatic(request, response, pathname)) {
@@ -715,15 +743,21 @@ export class GameServer {
     });
   }
 
-  private authenticatedUser(cookieHeader: string | undefined): number | null {
+  private authenticatedUser(cookieHeader: string | undefined, response?: ServerResponse, request?: IncomingMessage): number | null {
     const token = parseCookie(cookieHeader, "session");
-    if (token === null) {
+    if (token === null) return null;
+    const tokenHash = hashToken(token);
+    const session = this.database.prepare("SELECT user_id, expires_at FROM sessions WHERE token_hash = ?")
+      .get(tokenHash) as { user_id: number; expires_at: number } | undefined;
+    if (!session || session.expires_at <= this.now()) {
+      this.database.prepare("DELETE FROM sessions WHERE token_hash = ?").run(tokenHash);
       return null;
     }
-    const session = this.database
-      .prepare("SELECT user_id FROM sessions WHERE token_hash = ?")
-      .get(hashToken(token)) as { user_id: number } | undefined;
-    return session?.user_id ?? null;
+    this.database.prepare("UPDATE sessions SET expires_at = ? WHERE token_hash = ?")
+      .run(this.now() + this.sessionTtlMs, tokenHash);
+    if (response && request) response.setHeader("Set-Cookie", sessionCookie(token,
+      this.cookieSecure || encryptedRequest(request), Math.floor(this.sessionTtlMs / 1000)));
+    return session.user_id;
   }
 
   private sendJson(
@@ -1335,39 +1369,3 @@ async function readRequestBody(request: IncomingMessage): Promise<string> {
   return Buffer.concat(chunks).toString("utf8");
 }
 
-function hashPassword(password: string, salt: string): string {
-  return scryptSync(password, salt, 64).toString("hex");
-}
-
-function passwordMatches(
-  password: string,
-  salt: string,
-  expectedHash: string,
-): boolean {
-  const actual = Buffer.from(hashPassword(password, salt), "hex");
-  const expected = Buffer.from(expectedHash, "hex");
-  return (
-    actual.length === expected.length &&
-    timingSafeEqual(actual, expected)
-  );
-}
-
-function hashToken(token: string): string {
-  return createHash("sha256").update(token).digest("hex");
-}
-
-function parseCookie(
-  cookieHeader: string | undefined,
-  name: string,
-): string | null {
-  if (cookieHeader === undefined) {
-    return null;
-  }
-  for (const entry of cookieHeader.split(";")) {
-    const [key, ...valueParts] = entry.trim().split("=");
-    if (key === name) {
-      return valueParts.join("=") || null;
-    }
-  }
-  return null;
-}
