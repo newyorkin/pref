@@ -1,3 +1,4 @@
+import { useReconnectingSocket } from "./useReconnectingSocket.js";
 import {
   useEffect,
   useState,
@@ -640,62 +641,17 @@ function TableLobby({ tableId }: { tableId: string }): React.JSX.Element {
 
   const waitingForDeal = table !== null && !table.dealt;
 
-  useEffect(() => {
-    if (!waitingForDeal) {
-      return;
-    }
-    let stopped = false;
-    let socket: WebSocket | null = null;
-    let reconnectTimer: number | undefined;
-
-    function connect(): void {
-      if (stopped) {
-        return;
+  useReconnectingSocket(`lobby:${tableId}`, waitingForDeal, {
+    onOpen: socket => socket.send(JSON.stringify({ type: "watch", tableId })),
+    onMessage: event => {
+      if (typeof event.data !== "string") return;
+      let message: unknown;
+      try { message = JSON.parse(event.data); } catch { return; }
+      if (isTableMessage(message) && message.tableId === tableId) {
+        setTable(current => mergeTable(current, message));
       }
-      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const nextSocket = new WebSocket(
-        `${protocol}//${window.location.host}/ws`,
-      );
-      socket = nextSocket;
-      nextSocket.addEventListener("open", () => {
-        if (socket !== nextSocket) {
-          return;
-        }
-        nextSocket.send(JSON.stringify({ type: "watch", tableId }));
-      });
-      nextSocket.addEventListener("message", (event) => {
-        if (typeof event.data !== "string") {
-          return;
-        }
-        let message: unknown;
-        try {
-          message = JSON.parse(event.data) as unknown;
-        } catch {
-          return;
-        }
-        if (!isTableMessage(message) || message.tableId !== tableId) {
-          return;
-        }
-        setTable((current) => mergeTable(current, message));
-      });
-      nextSocket.addEventListener("close", () => {
-        if (stopped || socket !== nextSocket) {
-          return;
-        }
-        reconnectTimer = window.setTimeout(connect, 250);
-      });
-    }
-
-    const startTimer = window.setTimeout(connect, 0);
-    return () => {
-      stopped = true;
-      window.clearTimeout(startTimer);
-      if (reconnectTimer !== undefined) {
-        window.clearTimeout(reconnectTimer);
-      }
-      socket?.close();
-    };
-  }, [waitingForDeal, tableId]);
+    },
+  });
 
   useEffect(() => {
     if (!waitingForDeal) {
@@ -747,7 +703,6 @@ function TableLobby({ tableId }: { tableId: string }): React.JSX.Element {
     try {
       const response = await api(`/tables/${tableId}/deal`, {
         method: "POST",
-        body: JSON.stringify({ seed: Date.now() }),
       });
       if (!response.ok) {
         setError("Не удалось сдать");

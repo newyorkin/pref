@@ -1,181 +1,99 @@
 import {
   applyAuctionAction,
   bidRank,
-  createAuction,
-  type AuctionAction,
   type AuctionResult,
-  type AuctionState,
   type Bid,
   type Seat,
   type Trump,
 } from "./auction.js";
-import { deal, type Card, type Deal } from "./deck.js";
+import {
+  finishDeal,
+  finishHalfWhist,
+  finishPassedContract,
+  finishWithoutThree,
+} from "./deal-result.js";
+import { type Card, type Deal } from "./deck.js";
 import {
   applyDefenseAction,
   createDefenseState,
   type DefenseAction,
-  type DefenseState,
 } from "./defense.js";
 import {
+  accept,
+  currentHands,
+  dealerSeat,
+  firstLeader,
+  reject,
+  startDeal,
+} from "./game-state.js";
+import type {
+  DealLayout,
+  GameAction,
+  GameSeatView,
+  GameSettings,
+  GameState,
+  GameTransition,
+} from "./game-types.js";
+import {
+  contractTrump,
+  declarerOpens,
+  gameTurn,
+  lightPartners,
+  misereCardsOpen,
+  openWhistHand,
+  playedHand,
+  shownWhistHands,
+  styleChoiceDue,
+  visibleTalon,
+} from "./hand-view.js";
+import {
+  answerProposal,
+  offerProposal,
+  proposalOffers,
+  proposalReplies,
+  proposedHands,
+} from "./proposals.js";
+import {
   createBulletScore,
-  isBulletComplete,
-  scoreDeal,
   scoreOpenTalon,
   scoreSince,
   scoreTalonThrow,
   settleBullet,
   type BulletScore,
-  type ScoredDeal,
 } from "./scoring.js";
-import { discardCards, takeTalon, type TalonState } from "./talon.js";
 import {
-  createTrickPlay,
-  playCard,
-  type TrickPlayState,
-} from "./tricks.js";
-import {
-  nextRaspasIndex,
   raspasMinimumOrderLevel,
   raspasMultiplier,
-  type TableSettings,
+  type ContractLevel,
 } from "./settings.js";
-import { view as trickView, type VisiblePlayedCard } from "./view.js";
-
-export type GameSettings = TableSettings;
-
-export type GamePhase =
-  | "auction"
-  | "discard"
-  | "order"
-  | "defense"
-  | "raspas"
-  | "play"
-  | "finished";
-
-export type GameAction =
-  | { readonly type: "auction"; readonly action: AuctionAction }
-  | {
-      readonly type: "discard";
-      readonly cards: readonly [Card, Card];
-    }
-  | { readonly type: "throwTalon" }
-  | { readonly type: "order"; readonly bid: Bid }
-  | { readonly type: "withoutThree" }
-  | { readonly type: "openTalon"; readonly index: 0 | 1 }
-  | { readonly type: "defense"; readonly action: DefenseAction }
-  | { readonly type: "playCard"; readonly card: Card }
-  | { readonly type: "propose"; readonly tricks: number }
-  | { readonly type: "proposal"; readonly answer: "agree" | "decline" }
-  | { readonly type: "rematch"; readonly seed: number };
-
-export interface Proposal {
-  readonly tricks: number;
-  readonly proposer: Seat;
-  readonly answers: readonly [
-    "agree" | "decline" | null,
-    "agree" | "decline" | null,
-    "agree" | "decline" | null,
-  ];
-}
-
-export interface PlayedDeal {
-  readonly number: number;
-  readonly declarer: Seat | null;
-  readonly contract: string;
-  readonly tricks: readonly [number, number, number];
-  readonly delta: BulletScore["last"];
-}
-
-export interface DealLayout {
-  readonly hands: readonly [
-    readonly Card[],
-    readonly Card[],
-    readonly Card[],
-  ];
-  readonly talon: readonly Card[];
-  readonly discarded: readonly Card[];
-  readonly tricks: readonly [number, number, number];
-}
-
-export interface TableSpeech {
-  readonly seat: Seat | null;
-  readonly word: string;
-  readonly step: number;
-}
-
-export interface SpeechDeal {
-  readonly deal: number;
-  readonly lines: readonly TableSpeech[];
-}
-
-export interface GameState {
-  readonly settings: GameSettings;
-  readonly phase: GamePhase;
-  readonly seed: number;
-  readonly dealNumber: number;
-  readonly raspasIndex: number;
-  readonly score: BulletScore;
-  readonly scoreAtDealStart?: BulletScore;
-  readonly dealtCards: Deal;
-  readonly auction: AuctionState;
-  readonly auctionResult: AuctionResult | null;
-  readonly talon: TalonState | null;
-  readonly defense: DefenseState | null;
-  readonly play: TrickPlayState | null;
-  readonly proposal?: Proposal | null;
-  readonly lastLayout?: DealLayout | null;
-  readonly deals?: readonly PlayedDeal[];
-  readonly layoutHands?: DealLayout["hands"] | null;
-  readonly raspasOrder?: readonly [Card, Card] | null;
-  readonly prikupShown?: number;
-  readonly misereCalls?: number;
-  readonly speech?: readonly TableSpeech[];
-  readonly speechStep?: number;
-  readonly speechLog?: readonly SpeechDeal[];
-}
-
-export type GameTransition =
-  | { readonly accepted: true; readonly state: GameState }
-  | {
-      readonly accepted: false;
-      readonly reason: string;
-      readonly state: GameState;
-    };
-
-export interface GameSeatView {
-  readonly phase: GamePhase;
-  readonly hand: readonly Card[];
-  readonly handSizes: readonly [number, number, number];
-  readonly auction: AuctionState;
-  readonly defense: DefenseState | null;
-  readonly currentTrick: readonly VisiblePlayedCard[];
-  readonly trickHistory: TrickPlayState["trickHistory"];
-  readonly tricksWon: TrickPlayState["tricksWon"];
-  readonly score: BulletScore;
-  readonly raspasIndex: number;
-  readonly raspasMultiplier: number;
-  readonly dealNumber: number;
-  readonly trump: Trump | null;
-  readonly talonCards: readonly Card[];
-  readonly discarded: readonly Card[];
-  readonly facedTalon: boolean;
-  readonly openHand: readonly Card[];
-  readonly openSeat: Seat | null;
-  readonly shownHands: readonly [
-    readonly Card[] | null,
-    readonly Card[] | null,
-    readonly Card[] | null,
-  ];
-  readonly turn: Seat | null;
-  readonly allowedActions: readonly GameAction[];
-  readonly settlement: readonly [number, number, number] | null;
-  readonly prikup: readonly (Card | { readonly faceDown: true })[];
-  readonly lastLayout: DealLayout | null;
-  readonly deals: readonly PlayedDeal[];
-  readonly speech: readonly TableSpeech[];
-  readonly speechStep: number;
-  readonly speechLog: readonly SpeechDeal[];
-}
+import {
+  advanceSpeech,
+  bidWord,
+  raspasCallWord,
+  speechForAuction,
+  speechForDefense,
+  speechForSixDiamondsOrder,
+  talonAceRequest,
+  talonAceWord,
+  visibleSpeechLog,
+  withSpeech,
+} from "./speech.js";
+import { discardCards, takeTalon } from "./talon.js";
+import { createTrickPlay, playCard, type TrickPlayState } from "./tricks.js";
+import { view as trickView } from "./view.js";
+export type {
+  DealLayout,
+  GameAction,
+  GamePhase,
+  GameSeatView,
+  GameSettings,
+  GameState,
+  GameTransition,
+  PlayedDeal,
+  Proposal,
+  SpeechDeal,
+  TableSpeech,
+} from "./game-types.js";
 
 const BID_LADDER: readonly Bid[] = [
   ...contractBids(6),
@@ -188,26 +106,34 @@ const BID_LADDER: readonly Bid[] = [
 
 export function createGame(
   settings: GameSettings,
-  seed: number,
+  source: number | Deal,
   score: BulletScore = createBulletScore(),
   raspasIndex = 0,
 ): GameState {
-  return startDeal(settings, seed, 0, score, raspasIndex);
+  return startDeal(
+    settings,
+    typeof source === "number" ? source : 0,
+    0,
+    score,
+    raspasIndex,
+    null,
+    [],
+    [],
+    typeof source === "number" ? undefined : source,
+  );
 }
 
 export function applyGameAction(
   state: GameState,
   seat: Seat,
   action: GameAction,
+  dealSource?: () => Deal,
 ): GameTransition {
   if (action.type === "rematch") {
     if (state.phase !== "finished") {
       return reject(state, "invalidPhase");
     }
-    if (!Number.isSafeInteger(action.seed)) {
-      return reject(state, "invalidSeed");
-    }
-    return accept(createGame(state.settings, action.seed));
+    return accept(createGame(state.settings, dealSource?.() ?? state.seed));
   }
   if (state.phase === "finished") {
     return reject(state, "finished");
@@ -281,7 +207,7 @@ export function applyGameAction(
       return reject(state, "invalidPhase");
     }
     if (action.type === "throwTalon") {
-      return throwTalonInFace(state, seat);
+      return throwTalonInFace(state, seat, dealSource);
     }
     if (action.type !== "discard") {
       return reject(state, "invalidPhase");
@@ -291,7 +217,7 @@ export function applyGameAction(
       return reject(state, transition.reason);
     }
     return accept(
-      continueAfterDiscard(state, transition.state, state.score),
+      continueAfterDiscard(state, transition.state, state.score, dealSource),
     );
   }
 
@@ -311,10 +237,13 @@ export function applyGameAction(
         return reject(state, "notYourTurn");
       }
       return accept(
-        finishWithoutThree({
-          ...state,
-          ...withSpeech(state, seat, "без трёх", true),
-        }),
+        finishWithoutThree(
+          {
+            ...state,
+            ...withSpeech(state, seat, "без трёх", true),
+          },
+          dealSource,
+        ),
       );
     }
     if (action.type !== "order") {
@@ -370,18 +299,10 @@ export function applyGameAction(
   }
 
   if (state.phase === "defense") {
-    if (
-      action.type !== "defense" ||
-      state.defense === null ||
-      state.talon === null
-    ) {
+    if (action.type !== "defense" || state.defense === null || state.talon === null) {
       return reject(state, "invalidPhase");
     }
-    const transition = applyDefenseAction(
-      state.defense,
-      seat,
-      action.action,
-    );
+    const transition = applyDefenseAction(state.defense, seat, action.action);
     if (!transition.accepted) {
       return reject(state, transition.reason);
     }
@@ -390,10 +311,7 @@ export function applyGameAction(
       ...speechForDefense(state, seat, action.action),
     };
     if (transition.state.phase !== "play") {
-      if (
-        transition.state.phase === "style" &&
-        declarerOpens(voiced)
-      ) {
+      if (transition.state.phase === "style" && declarerOpens(voiced)) {
         return accept({
           ...voiced,
           phase: "play",
@@ -413,8 +331,8 @@ export function applyGameAction(
       const closed = { ...voiced, defense: transition.state };
       return accept(
         transition.state.halfWhist === null
-          ? finishPassedContract(closed)
-          : finishHalfWhist(closed),
+          ? finishPassedContract(closed, dealSource)
+          : finishHalfWhist(closed, dealSource),
       );
     }
     return accept({
@@ -461,7 +379,7 @@ export function applyGameAction(
     if (action.type !== "proposal") {
       return reject(state, "invalidPhase");
     }
-    return answerProposal(state, seat, action.answer);
+    return answerProposal(state, seat, action.answer, dealSource);
   }
 
   if (state.phase === "play" && action.type === "propose") {
@@ -500,18 +418,17 @@ export function applyGameAction(
     return reject(state, transition.reason);
   }
   if (state.auctionResult?.type === "raspas") {
-    return accept(continueRaspas(state, transition.state));
+    return accept(continueRaspas(state, transition.state, dealSource));
   }
   if (transition.state.result === null) {
     return accept({ ...state, play: transition.state });
   }
-  return accept(finishDeal({ ...state, play: transition.state }));
+  return accept(finishDeal({ ...state, play: transition.state }, dealSource));
 }
 
 export function gameView(state: GameState, seat: Seat): GameSeatView {
   const hand = currentHands(state)[seat];
-  const playView =
-    state.play === null ? null : trickView(state.play, seat);
+  const playView = state.play === null ? null : trickView(state.play, seat);
 
   return {
     phase: state.phase,
@@ -538,9 +455,7 @@ export function gameView(state: GameState, seat: Seat): GameSeatView {
     discarded:
       state.talon === null
         ? []
-        : state.talon.faced ||
-            state.talon.declarer === seat ||
-            misereCardsOpen(state)
+        : state.talon.faced || state.talon.declarer === seat || misereCardsOpen(state)
           ? state.talon.discarded
           : [],
     facedTalon: state.talon?.faced === true,
@@ -549,8 +464,7 @@ export function gameView(state: GameState, seat: Seat): GameSeatView {
     shownHands: proposedHands(shownWhistHands(state, seat), state, seat),
     turn: gameTurn(state),
     allowedActions: allowedGameActions(state, seat),
-    settlement:
-      state.phase === "finished" ? settleBullet(state.score) : null,
+    settlement: state.phase === "finished" ? settleBullet(state.score) : null,
     prikup: prikupCards(state),
     lastLayout: state.lastLayout ?? null,
     deals: state.deals ?? [],
@@ -560,171 +474,6 @@ export function gameView(state: GameState, seat: Seat): GameSeatView {
   };
 }
 
-function visibleSpeechLog(state: GameState): readonly SpeechDeal[] {
-  const prior = state.speechLog ?? [];
-  const lines = state.speech ?? [];
-  if (lines.length === 0) {
-    return prior;
-  }
-  return [...prior, { deal: state.dealNumber + 1, lines }];
-}
-
-function lightPartners(
-  state: GameState,
-): { readonly passer: Seat; readonly whistler: Seat } | null {
-  if (state.defense?.whistStyle !== "light" || state.phase !== "play") {
-    return null;
-  }
-  const whistler = state.defense.whistlers[0];
-  const passer = state.defense.defenders.find(
-    (defender) => state.defense?.decisions[defender] === "pass",
-  );
-  if (whistler === undefined || passer === undefined) {
-    return null;
-  }
-  return { passer, whistler };
-}
-
-function playedHand(state: GameState, actor: Seat): Seat | null {
-  if (state.phase !== "play" || state.play?.turn == null) {
-    return null;
-  }
-  const partners = lightPartners(state);
-  if (partners !== null && state.play.turn === partners.passer) {
-    return actor === partners.whistler ? partners.passer : null;
-  }
-  return state.play.turn === actor ? actor : null;
-}
-
-function openWhistHand(state: GameState): readonly Card[] {
-  const partners = lightPartners(state);
-  if (partners === null || state.play === null) {
-    return [];
-  }
-  return state.play.hands[partners.passer];
-}
-
-function misereCardsOpen(state: GameState): boolean {
-  return (
-    state.auctionResult?.type === "misere" &&
-    (state.phase === "discard" || state.phase === "order")
-  );
-}
-
-function shownWhistHands(
-  state: GameState,
-  viewer: Seat,
-): readonly [readonly Card[] | null, readonly Card[] | null, readonly Card[] | null] {
-  const hidden = [null, null, null] as [
-    readonly Card[] | null,
-    readonly Card[] | null,
-    readonly Card[] | null,
-  ];
-  if (state.auctionResult?.type === "misere") {
-    const hands = [...hidden] as [
-      readonly Card[] | null,
-      readonly Card[] | null,
-      readonly Card[] | null,
-    ];
-    if (misereCardsOpen(state)) {
-      const declarer = state.auctionResult.declarer;
-      if (declarer !== viewer) {
-        hands[declarer] = currentHands(state)[declarer];
-      }
-      return hands;
-    }
-    if (state.phase === "play" && state.play !== null) {
-      const declarer = state.auctionResult.declarer;
-      for (const seat of [0, 1, 2] as const) {
-        if (seat !== declarer && seat !== viewer) {
-          hands[seat] = state.play.hands[seat];
-        }
-      }
-      return hands;
-    }
-    return hidden;
-  }
-  const partners = lightPartners(state);
-  if (partners === null || state.play === null) {
-    return hidden;
-  }
-  const hands = [...hidden] as [
-    readonly Card[] | null,
-    readonly Card[] | null,
-    readonly Card[] | null,
-  ];
-  hands[partners.passer] = state.play.hands[partners.passer];
-  hands[partners.whistler] = state.play.hands[partners.whistler];
-  hands[viewer] = null;
-  return hands;
-}
-
-function declarerOpens(state: GameState): boolean {
-  return (
-    state.auctionResult?.type === "contract" &&
-    firstLeader(state.dealNumber) === state.auctionResult.declarer
-  );
-}
-
-function styleChoiceDue(state: GameState): boolean {
-  return (
-    state.phase === "play" &&
-    state.defense?.phase === "style" &&
-    (state.play?.currentTrick.length ?? 0) > 0
-  );
-}
-
-function gameTurn(state: GameState): Seat | null {
-  if (state.phase === "auction") {
-    return state.auction.turn;
-  }
-  if (state.phase === "discard" || state.phase === "order") {
-    return state.auctionResult?.type === "raspas"
-      ? null
-      : (state.auctionResult?.declarer ?? state.talon?.declarer ?? null);
-  }
-  if (state.phase === "defense") {
-    return state.defense?.turn ?? null;
-  }
-  if (state.phase === "play") {
-    if (styleChoiceDue(state)) {
-      return state.defense?.whistlers[0] ?? null;
-    }
-    const partners = lightPartners(state);
-    if (partners !== null && state.play?.turn === partners.passer) {
-      return partners.whistler;
-    }
-    return state.play?.turn ?? null;
-  }
-  return null;
-}
-
-function visibleTalon(state: GameState): readonly Card[] {
-  const result = state.auctionResult;
-  if (result?.type !== "contract" && result?.type !== "misere") {
-    return [];
-  }
-  const choosingWhist =
-    state.phase === "defense" && state.defense?.phase === "whist";
-  if (
-    state.phase !== "discard" &&
-    state.phase !== "order" &&
-    !choosingWhist
-  ) {
-    return [];
-  }
-  return state.dealtCards.talon;
-}
-
-function contractTrump(state: GameState): Trump | null {
-  if (state.auctionResult?.type !== "contract") {
-    return null;
-  }
-  return state.auctionResult.trump === "noTrump"
-    ? null
-    : state.auctionResult.trump;
-}
-
 export function gameRaspasMultiplier(
   progression: GameSettings["raspasProgression"],
   index: number,
@@ -732,10 +481,7 @@ export function gameRaspasMultiplier(
   return raspasMultiplier(progression, index);
 }
 
-function allowedGameActions(
-  state: GameState,
-  seat: Seat,
-): readonly GameAction[] {
+function allowedGameActions(state: GameState, seat: Seat): readonly GameAction[] {
   if (state.phase === "auction" && state.auction.turn === seat) {
     if (
       state.auction.misereBidder === seat &&
@@ -744,9 +490,7 @@ function allowedGameActions(
       return [{ type: "auction", action: { type: "pass" } }];
     }
     const currentRank =
-      state.auction.highestBid === null
-        ? -2
-        : bidRank(state.auction.highestBid);
+      state.auction.highestBid === null ? -2 : bidRank(state.auction.highestBid);
     return [
       { type: "auction", action: { type: "pass" } },
       ...BID_LADDER.filter((bid) => {
@@ -754,12 +498,10 @@ function allowedGameActions(
           return false;
         }
         return bidRank(bid) > currentRank;
-      }).map(
-        (bid) => ({
-          type: "auction" as const,
-          action: { type: "bid" as const, bid },
-        }),
-      ),
+      }).map((bid) => ({
+        type: "auction" as const,
+        action: { type: "bid" as const, bid },
+      })),
     ];
   }
   if (
@@ -769,9 +511,10 @@ function allowedGameActions(
     state.auctionResult.declarer === seat
   ) {
     const result = state.auctionResult;
-    const orders = BID_LADDER.filter((bid) => isLegalOrder(state, bid)).map(
-      (bid) => ({ type: "order" as const, bid }),
-    );
+    const orders = BID_LADDER.filter((bid) => isLegalOrder(state, bid)).map((bid) => ({
+      type: "order" as const,
+      bid,
+    }));
     return result.type === "contract"
       ? [...orders, { type: "withoutThree" as const }]
       : orders;
@@ -782,10 +525,7 @@ function allowedGameActions(
       { type: "openTalon", index: 1 },
     ];
   }
-  if (
-    state.phase === "discard" &&
-    state.talon?.declarer === seat
-  ) {
+  if (state.phase === "discard" && state.talon?.declarer === seat) {
     const hand = state.talon.hands[seat];
     const actions: GameAction[] = canThrowTalon(state, seat)
       ? [{ type: "throwTalon" }]
@@ -800,10 +540,7 @@ function allowedGameActions(
     }
     return actions;
   }
-  if (
-    state.phase === "defense" &&
-    state.defense?.turn === seat
-  ) {
+  if (state.phase === "defense" && state.defense?.turn === seat) {
     const candidates: DefenseAction[] = [
       { type: "pass" },
       { type: "whist" },
@@ -812,10 +549,7 @@ function allowedGameActions(
       { type: "dark" },
     ];
     return candidates
-      .filter(
-        (action) =>
-          applyDefenseAction(state.defense!, seat, action).accepted,
-      )
+      .filter((action) => applyDefenseAction(state.defense!, seat, action).accepted)
       .map((action) => ({ type: "defense", action }));
   }
   if (state.phase === "play" && styleChoiceDue(state)) {
@@ -845,357 +579,11 @@ function allowedGameActions(
   return [];
 }
 
-function proposalAvailable(state: GameState): boolean {
-  const misere = state.auctionResult?.type === "misere";
-  return (
-    state.phase === "play" &&
-    state.play !== null &&
-    state.proposal == null &&
-    (state.auctionResult?.type === "contract" || state.auctionResult?.type === "misere") &&
-    (misere || state.defense?.whistlers.length === 1) &&
-    (misere || state.defense?.whistStyle !== "dark") &&
-    !styleChoiceDue(state)
-  );
-}
-
-function proposalSeat(state: GameState, seat: Seat): boolean {
-  if (state.auctionResult?.type === "misere") {
-    return true;
-  }
-  return state.auctionResult?.type === "contract" &&
-    (seat === state.auctionResult.declarer || state.defense?.whistlers.includes(seat) === true);
-}
-
-function proposalOffers(state: GameState, seat: Seat): readonly GameAction[] {
-  if (!proposalAvailable(state) || state.auctionResult == null || state.auctionResult.type === "raspas") {
-    return [];
-  }
-  if (!proposalSeat(state, seat) || state.play === null) {
-    return [];
-  }
-  const offers: GameAction[] = [];
-  const floor = state.auctionResult.type === "misere"
-    ? 0
-    : state.play.tricksWon[state.auctionResult.declarer];
-  for (let tricks = floor; tricks <= 10; tricks += 1) {
-    offers.push({ type: "propose", tricks });
-  }
-  return offers;
-}
-
-function proposalReplies(state: GameState, seat: Seat): readonly GameAction[] {
-  const proposal = state.proposal;
-  if (
-    proposal == null ||
-    state.auctionResult === null ||
-    seat === proposal?.proposer ||
-    proposal.answers[seat] !== null
-  ) {
-    return [];
-  }
-  return [
-    { type: "proposal", answer: "agree" },
-    { type: "proposal", answer: "decline" },
-  ];
-}
-
-function offerProposal(
+function throwTalonInFace(
   state: GameState,
   seat: Seat,
-  tricks: number,
+  dealSource?: () => Deal,
 ): GameTransition {
-  if (!proposalAvailable(state) || state.auctionResult == null || state.auctionResult.type === "raspas") {
-    return reject(state, "invalidPhase");
-  }
-  if (!proposalSeat(state, seat)) {
-    return reject(state, "notYourTurn");
-  }
-  const floor = state.auctionResult.type === "misere"
-    ? 0
-    : state.play?.tricksWon[state.auctionResult.declarer] ?? 0;
-  if (!Number.isInteger(tricks) || tricks < floor || tricks > 10) {
-    return reject(state, "invalidProposal");
-  }
-  return accept({
-    ...state,
-    ...withSpeech(state, seat, state.auctionResult.declarer === seat ? `${tricks} запишем?` : `отдаём ${tricks}?`, true),
-    proposal: { tricks, proposer: seat, answers: [null, null, null] },
-  });
-}
-
-function answerProposal(
-  state: GameState,
-  seat: Seat,
-  answer: "agree" | "decline",
-): GameTransition {
-  const proposal = state.proposal;
-  if (
-    proposal == null ||
-    state.auctionResult === null ||
-    seat === proposal?.proposer ||
-    proposal.answers[seat] !== null
-  ) {
-    return reject(state, "notYourTurn");
-  }
-  if (answer === "decline") {
-    return accept({
-      ...state,
-      ...withSpeech(state, seat, "не согласен", true),
-      proposal: null,
-    });
-  }
-  const answers: Proposal["answers"] = [
-    seat === 0 ? "agree" : proposal.answers[0],
-    seat === 1 ? "agree" : proposal.answers[1],
-    seat === 2 ? "agree" : proposal.answers[2],
-  ];
-  const voiced: GameState = {
-    ...state,
-    ...withSpeech(state, seat, "согласен", false),
-    proposal: { tricks: proposal.tricks, proposer: proposal.proposer, answers },
-  };
-  const both = ([0, 1, 2] as const).every(
-    (place) => place === proposal.proposer || answers[place] === "agree",
-  );
-  return accept(both ? finishProposal(voiced) : voiced);
-}
-
-function finishProposal(state: GameState): GameState {
-  const auctionResult = state.auctionResult;
-  const proposal = state.proposal;
-  const whistler = state.defense?.whistlers[0];
-  if (
-    auctionResult == null || auctionResult.type === "raspas" ||
-    proposal == null ||
-    (auctionResult.type === "contract" && whistler === undefined) ||
-    state.play === null
-  ) {
-    throw new Error("Cannot record a proposal");
-  }
-  const tricks = [0, 0, 0] as [number, number, number];
-  const declarer = auctionResult.declarer;
-  tricks[declarer] = proposal.tricks;
-  const remainingTricks = 10 - proposal.tricks;
-  if (whistler !== undefined) {
-    tricks[whistler] = remainingTricks;
-  } else {
-    tricks[((declarer + 1) % 3) as Seat] = remainingTricks;
-  }
-  const passer = state.defense?.defenders.find(
-    (defender) => state.defense?.decisions[defender] === "pass",
-  );
-  const scoreResult: ScoredDeal = auctionResult.type === "misere"
-    ? { type: "misere", declarer, tricks }
-    : { type: "contract", declarer, level: auctionResult.level, tricks, whistlers: [whistler!], ...(passer === undefined ? {} : { passer }) };
-  return closeScoredDeal(
-    {
-      ...state,
-      proposal: null,
-      play: { ...state.play, result: tricks },
-    },
-    scoreResult,
-    auctionResult.type === "misere" ? proposal.tricks === 0 : proposal.tricks >= auctionResult.level,
-  );
-}
-
-function proposedHands(
-  hands: GameSeatView["shownHands"],
-  state: GameState,
-  viewer: Seat,
-): GameSeatView["shownHands"] {
-  void state;
-  void viewer;
-  return hands;
-}
-
-function finishDeal(state: GameState): GameState {
-  const result = state.play?.result;
-  const auctionResult = state.auctionResult;
-  if (result === null || result === undefined || auctionResult === null) {
-    throw new Error("Cannot finish an incomplete deal");
-  }
-
-  let scoredDeal: ScoredDeal;
-  let takenGame = false;
-  if (auctionResult.type === "raspas") {
-    scoredDeal = {
-      type: "raspas",
-      tricks: result,
-      multiplier: gameRaspasMultiplier(
-        state.settings.raspasProgression,
-        state.raspasIndex,
-      ),
-    };
-  } else if (auctionResult.type === "misere") {
-    takenGame = result[auctionResult.declarer] === 0;
-    scoredDeal = {
-      type: "misere",
-      declarer: auctionResult.declarer,
-      tricks: result,
-    };
-  } else {
-    const whistlers = state.defense?.whistlers ?? [];
-    takenGame =
-      whistlers.length === 0 ||
-      result[auctionResult.declarer] >= auctionResult.level;
-    const passer = state.defense?.defenders.find(
-      (defender) => state.defense?.decisions[defender] === "pass",
-    );
-    scoredDeal = {
-      type: "contract",
-      declarer: auctionResult.declarer,
-      level: auctionResult.level,
-      tricks: result,
-      whistlers,
-      ...(whistlers.length === 1 && passer !== undefined
-        ? { passer }
-        : {}),
-    };
-  }
-
-  return closeScoredDeal(state, scoredDeal, takenGame);
-}
-
-function finishWithoutThree(state: GameState): GameState {
-  const auctionResult = state.auctionResult;
-  if (auctionResult?.type !== "contract") {
-    throw new Error("Cannot leave without three");
-  }
-  return closeScoredDeal(
-    state,
-    {
-      type: "contract",
-      declarer: auctionResult.declarer,
-      level: auctionResult.level,
-      tricks: [0, 0, 0] as const,
-      whistlers: [],
-      withoutThree: true,
-    },
-    false,
-  );
-}
-
-function finishHalfWhist(state: GameState): GameState {
-  const auctionResult = state.auctionResult;
-  const halfWhist = state.defense?.halfWhist;
-  if (auctionResult?.type !== "contract" || halfWhist === null || halfWhist === undefined) {
-    throw new Error("Cannot close a half-whist");
-  }
-  return closeScoredDeal(
-    state,
-    {
-      type: "contract",
-      declarer: auctionResult.declarer,
-      level: auctionResult.level,
-      tricks: [0, 0, 0] as const,
-      whistlers: [],
-      halfWhist,
-    },
-    true,
-  );
-}
-
-function finishPassedContract(state: GameState): GameState {
-  const auctionResult = state.auctionResult;
-  if (auctionResult?.type !== "contract") {
-    throw new Error("Cannot close a passed contract");
-  }
-  return closeScoredDeal(
-    state,
-    {
-      type: "contract",
-      declarer: auctionResult.declarer,
-      level: auctionResult.level,
-      tricks: [0, 0, 0] as const,
-      whistlers: [],
-    },
-    true,
-  );
-}
-
-function closeScoredDeal(
-  state: GameState,
-  scoredDeal: ScoredDeal,
-  takenGame: boolean,
-): GameState {
-  const auctionResult = state.auctionResult;
-  if (auctionResult === null) {
-    throw new Error("Cannot finish a deal without a result");
-  }
-  const baseline = state.scoreAtDealStart ?? state.score;
-  const score = scoreSince(
-    baseline,
-    scoreDeal(state.score, scoredDeal, state.settings.bulletTarget),
-  );
-  const raspasIndex = raspasIndexAfterDeal(
-    state,
-    auctionResult,
-    takenGame,
-  );
-  const lastLayout = rememberLayout(state);
-  const deals = [...(state.deals ?? []), playedDeal(state, scoredDeal, score)];
-  const speechLog = archiveSpeech(state);
-  if (isBulletComplete(score, state.settings.bulletTarget)) {
-    return {
-      ...state,
-      phase: "finished",
-      score,
-      raspasIndex,
-      lastLayout,
-      deals,
-    };
-  }
-  return startDeal(
-    state.settings,
-    state.seed,
-    state.dealNumber + 1,
-    score,
-    raspasIndex,
-    lastLayout,
-    deals,
-    speechLog,
-  );
-}
-
-function archiveSpeech(state: GameState): readonly SpeechDeal[] {
-  const prior = state.speechLog ?? [];
-  const lines = state.speech ?? [];
-  if (lines.length === 0) {
-    return prior;
-  }
-  return [...prior, { deal: state.dealNumber + 1, lines }];
-}
-
-function raspasIndexAfterDeal(
-  state: GameState,
-  auctionResult: AuctionResult,
-  takenGame: boolean,
-): number {
-  if (auctionResult.type === "raspas") {
-    return nextRaspasIndex(
-      state.raspasIndex,
-      { type: "raspas" },
-      state.settings.raspasExit,
-    );
-  }
-  if (!takenGame) {
-    return state.raspasIndex;
-  }
-  if (auctionResult.type === "misere") {
-    return nextRaspasIndex(
-      state.raspasIndex,
-      { type: "takenMisere" },
-      state.settings.raspasExit,
-    );
-  }
-  return nextRaspasIndex(
-    state.raspasIndex,
-    { type: "takenContract", level: auctionResult.level },
-    state.settings.raspasExit,
-  );
-}
-
-function throwTalonInFace(state: GameState, seat: Seat): GameTransition {
   if (
     state.phase !== "discard" ||
     state.talon === null ||
@@ -1224,53 +612,12 @@ function throwTalonInFace(state: GameState, seat: Seat): GameTransition {
         state.scoreAtDealStart ?? state.score,
         scoreTalonThrow(state.score, dealerSeat(state.dealNumber)),
       ),
+      dealSource,
     ),
   );
 }
 
-function bulletGain(before: BulletScore, after: BulletScore): number {
-  const sum = (score: BulletScore) =>
-    score.bullet[0] + score.bullet[1] + score.bullet[2];
-  return sum(after) - sum(before);
-}
-
-function talonAceWord(written: number): string | null {
-  if (written === 1) {
-    return "туз в пулю";
-  }
-  if (written >= 2) {
-    return "два туза в пулю";
-  }
-  return null;
-}
-
-function talonAceRequest(aces: number): string {
-  return aces === 1
-    ? "за туза, попрошу записать 1 в пульку"
-    : "за тузов, попрошу записать 2 в пульку";
-}
-
-function raspasCallWord(state: GameState): string {
-  if (state.raspasIndex === 0) {
-    return "распасы";
-  }
-  const ordinal =
-    state.raspasIndex === 1
-      ? "вторые"
-      : state.raspasIndex === 2
-        ? "третьи"
-        : `${state.raspasIndex + 1}-е`;
-  const multiplier = raspasMultiplier(
-    state.settings.raspasProgression,
-    state.raspasIndex,
-  );
-  return `${ordinal} распасы (множитель ${multiplier})`;
-}
-
-function openedTalonScore(
-  state: GameState,
-  result: AuctionResult,
-): BulletScore {
+function openedTalonScore(state: GameState, result: AuctionResult): BulletScore {
   if (!state.settings.throwTalon || result.type !== "contract") {
     return state.score;
   }
@@ -1298,11 +645,9 @@ function continueAfterDiscard(
   state: GameState,
   talon: NonNullable<GameState["talon"]>,
   score: BulletScore,
+  dealSource?: () => Deal,
 ): GameState {
-  if (
-    state.auctionResult === null ||
-    state.auctionResult.type === "raspas"
-  ) {
+  if (state.auctionResult === null || state.auctionResult.type === "raspas") {
     throw new Error("Cannot leave the discard without a contract");
   }
   return {
@@ -1363,9 +708,13 @@ function withPlay(
   };
 }
 
-function continueRaspas(state: GameState, play: TrickPlayState): GameState {
+function continueRaspas(
+  state: GameState,
+  play: TrickPlayState,
+  dealSource?: () => Deal,
+): GameState {
   if (play.result !== null) {
-    return finishDeal({ ...state, play });
+    return finishDeal({ ...state, play }, dealSource);
   }
   if (
     play.currentTrick.length > 0 ||
@@ -1394,9 +743,7 @@ function continueRaspas(state: GameState, play: TrickPlayState): GameState {
   return { ...state, play };
 }
 
-function raspasTrickHistory(
-  state: GameState,
-): TrickPlayState["trickHistory"] {
+function raspasTrickHistory(state: GameState): TrickPlayState["trickHistory"] {
   const history = state.play?.trickHistory ?? [];
   if (
     state.auctionResult?.type !== "raspas" ||
@@ -1442,214 +789,7 @@ function prikupCards(
   return state.play.completedTricks >= 1 ? cards.slice(1) : cards;
 }
 
-function rememberLayout(state: GameState): DealLayout {
-  return {
-    hands:
-      state.layoutHands ??
-      state.talon?.hands ??
-      state.dealtCards.hands,
-    talon: state.dealtCards.talon,
-    discarded: state.talon?.discarded ?? [],
-    tricks: state.play?.result ?? [0, 0, 0],
-  };
-}
-
-function startDeal(
-  settings: GameSettings,
-  seed: number,
-  dealNumber: number,
-  score: BulletScore,
-  raspasIndex: number,
-  lastLayout: DealLayout | null = null,
-  deals: readonly PlayedDeal[] = [],
-  speechLog: readonly SpeechDeal[] = [],
-): GameState {
-  const dealtCards = deal(seed + dealNumber);
-  return {
-    settings,
-    phase: "auction",
-    seed,
-    dealNumber,
-    raspasIndex,
-    score,
-    scoreAtDealStart: score,
-    dealtCards,
-    auction: createAuction(firstLeader(dealNumber)),
-    auctionResult: null,
-    talon: null,
-    defense: null,
-    play: null,
-    lastLayout,
-    layoutHands: null,
-    raspasOrder: null,
-    prikupShown: 0,
-    deals,
-    speechLog,
-  };
-}
-
-const TRUMP_NAME = {
-  spades: "пик",
-  clubs: "треф",
-  diamonds: "бубен",
-  hearts: "червей",
-  noTrump: "без козыря",
-} as const;
-
-function withSpeech(
-  state: GameState,
-  seat: Seat | null,
-  word: string,
-  fresh: boolean,
-): { speech: readonly TableSpeech[]; speechStep: number } {
-  const speech = state.speech ?? [];
-  const current = state.speechStep ?? 0;
-  const step = fresh ? current + 1 : Math.max(current, 1);
-  return {
-    speechStep: step,
-    speech: [...speech, { seat, word, step }],
-  };
-}
-
-function advanceSpeech(
-  state: GameState,
-): { speech: readonly TableSpeech[]; speechStep: number } {
-  return {
-    speech: state.speech ?? [],
-    speechStep: (state.speechStep ?? 0) + 1,
-  };
-}
-
-function bidWord(bid: Bid): string {
-  if (bid.type === "misere") {
-    return "мизер";
-  }
-  return `${bid.level} ${TRUMP_NAME[bid.trump]}`;
-}
-
-function speechForAuction(
-  state: GameState,
-  seat: Seat,
-  action: AuctionAction,
-): { speech: readonly TableSpeech[]; speechStep: number } {
-  if (action.type === "pass") {
-    return withSpeech(state, seat, "пас", false);
-  }
-  return withSpeech(state, seat, bidWord(action.bid), true);
-}
-
-function speechForSixDiamondsOrder(
-  state: GameState,
-  seat: Seat,
-  bid: Bid,
-): { speech: readonly TableSpeech[]; speechStep: number } {
-  const voiced = withSpeech(state, seat, bidWord(bid), true);
-  return {
-    ...voiced,
-    speech: [
-      ...voiced.speech,
-      {
-        seat: null,
-        word: "кто играет шесть бубён - тот бывает наебён",
-        step: voiced.speechStep,
-      },
-    ],
-  };
-}
-
-function defenseWord(action: DefenseAction): string {
-  if (action.type === "pass") {
-    return "пас";
-  }
-  if (action.type === "whist") {
-    return "вист";
-  }
-  if (action.type === "halfWhist") {
-    return "полвиста";
-  }
-  if (action.type === "light") {
-    return "всветлую";
-  }
-  return "втёмную";
-}
-
-function speechForDefense(
-  state: GameState,
-  seat: Seat,
-  action: DefenseAction,
-): { speech: readonly TableSpeech[]; speechStep: number } {
-  const fresh = action.type === "light" || action.type === "dark";
-  return withSpeech(state, seat, defenseWord(action), fresh);
-}
-
-function playedDeal(
-  state: GameState,
-  scoredDeal: ScoredDeal,
-  score: BulletScore,
-): PlayedDeal {
-  const auction = state.auctionResult;
-  let declarer: Seat | null = null;
-  let contract = "Распасы";
-  if (auction?.type === "misere") {
-    declarer = auction.declarer;
-    contract = "Мизер";
-  } else if (auction?.type === "contract") {
-    declarer = auction.declarer;
-    const notes = [
-      scoredDeal.type === "contract" && scoredDeal.withoutThree === true
-        ? "без трёх"
-        : null,
-      state.talon?.faced === true ? "прикуп в лицо" : null,
-    ].filter((note) => note !== null);
-    contract = `${auction.level} ${TRUMP_NAME[auction.trump]}`;
-    if (notes.length > 0) {
-      contract = `${contract}, ${notes.join(", ")}`;
-    }
-  }
-  return {
-    number: state.dealNumber + 1,
-    declarer,
-    contract,
-    tricks: scoredDeal.tricks,
-    delta: score.last,
-  };
-}
-
-function currentHands(
-  state: GameState,
-): readonly [readonly Card[], readonly Card[], readonly Card[]] {
-  if (state.play !== null) {
-    return state.play.hands;
-  }
-  if (state.talon !== null) {
-    return state.talon.hands;
-  }
-  return state.dealtCards.hands;
-}
-
-function firstLeader(dealNumber: number): Seat {
-  return (dealNumber % 3) as Seat;
-}
-
-function dealerSeat(dealNumber: number): Seat {
-  return ((dealNumber + 2) % 3) as Seat;
-}
-
 function contractBids(level: 6 | 7 | 8 | 9 | 10): readonly Bid[] {
-  const trumps: readonly Trump[] = [
-    "spades",
-    "clubs",
-    "diamonds",
-    "hearts",
-    "noTrump",
-  ];
+  const trumps: readonly Trump[] = ["spades", "clubs", "diamonds", "hearts", "noTrump"];
   return trumps.map((trump) => ({ type: "contract", level, trump }));
-}
-
-function accept(state: GameState): GameTransition {
-  return { accepted: true, state };
-}
-
-function reject(state: GameState, reason: string): GameTransition {
-  return { accepted: false, reason, state };
 }

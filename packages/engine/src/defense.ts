@@ -26,13 +26,10 @@ export type DefenseAction =
   | { readonly type: DefenseDecision }
   | { readonly type: WhistStyle };
 
-export type DefenseRejection =
-  | "finished"
-  | "notYourTurn"
-  | "invalidDeclaration";
+export type DefenseRejection = "finished" | "notYourTurn" | "invalidDeclaration";
 
 export type DefenseTransition =
-  | { readonly accepted: true; readonly state: DefenseState }
+  | { readonly accepted: true; readonly reason?: never; readonly state: DefenseState }
   | {
       readonly accepted: false;
       readonly reason: DefenseRejection;
@@ -89,7 +86,11 @@ function applyWhistDeclaration(
   }
 
   const [firstDefender, secondDefender] = state.defenders;
-  const decisions = [...state.decisions] as DefenseState["decisions"];
+  const decisions = [...state.decisions] as [
+    DefenseDecision | null,
+    DefenseDecision | null,
+    DefenseDecision | null,
+  ];
   decisions[seat] = action.type;
 
   if (seat === firstDefender) {
@@ -103,10 +104,7 @@ function applyWhistDeclaration(
   return accept(finishWhistDeclarations(state, decisions));
 }
 
-function declareHalfWhist(
-  state: DefenseState,
-  seat: Seat,
-): DefenseTransition {
+function declareHalfWhist(state: DefenseState, seat: Seat): DefenseTransition {
   const [firstDefender, secondDefender] = state.defenders;
   if (
     seat !== secondDefender ||
@@ -115,7 +113,11 @@ function declareHalfWhist(
   ) {
     return reject(state, "invalidDeclaration");
   }
-  const decisions = [...state.decisions] as DefenseState["decisions"];
+  const decisions = [...state.decisions] as [
+    DefenseDecision | null,
+    DefenseDecision | null,
+    DefenseDecision | null,
+  ];
   decisions[seat] = "halfWhist";
   return accept({
     ...state,
@@ -136,12 +138,14 @@ function replyToHalfWhist(
   if (action.type !== "whist") {
     return reject(state, "invalidDeclaration");
   }
-  const decisions = [...state.decisions] as DefenseState["decisions"];
+  const decisions = [...state.decisions] as [
+    DefenseDecision | null,
+    DefenseDecision | null,
+    DefenseDecision | null,
+  ];
   decisions[firstDefender] = "whist";
   decisions[secondDefender] = "pass";
-  return accept(
-    finishWhistDeclarations({ ...state, halfWhist: null }, decisions),
-  );
+  return accept(finishWhistDeclarations({ ...state, halfWhist: null }, decisions));
 }
 
 function applyWhistStyle(
@@ -163,9 +167,7 @@ function finishWhistDeclarations(
   state: DefenseState,
   decisions: DefenseState["decisions"],
 ): DefenseState {
-  const whistlers = state.defenders.filter(
-    (seat) => decisions[seat] === "whist",
-  );
+  const whistlers = state.defenders.filter((seat) => decisions[seat] === "whist");
   const singleWhistler = whistlers.length === 1 ? whistlers[0] : undefined;
 
   return {
@@ -183,9 +185,6 @@ function accept(state: DefenseState): DefenseTransition {
   return { accepted: true, state };
 }
 
-function reject(
-  state: DefenseState,
-  reason: DefenseRejection,
-): DefenseTransition {
+function reject(state: DefenseState, reason: DefenseRejection): DefenseTransition {
   return { accepted: false, reason, state };
 }
