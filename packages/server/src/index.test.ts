@@ -989,7 +989,7 @@ describe("game server", () => {
       await reject("half-eight", 2, halfWhist);
       expect(
         clients[2].snapshot.state.allowedActions.some(
-          (action) => action.action?.type === "halfWhist",
+          (action) => action.type === "defense" && action.action?.type === "halfWhist",
         ),
       ).toBe(false);
 

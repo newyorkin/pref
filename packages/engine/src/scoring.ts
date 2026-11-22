@@ -1,5 +1,5 @@
-import type { ContractLevel } from "./settings.js";
 import type { Seat } from "./auction.js";
+import type { ContractLevel } from "./settings.js";
 
 type ScoreTriple = readonly [number, number, number];
 type WhistRow = readonly [number, number, number];
@@ -114,13 +114,9 @@ export function scoreDeal(
     return withLast(score, next);
   }
   const declarerTricks = deal.tricks[deal.declarer];
-  const taken =
-    deal.whistlers.length === 0 || declarerTricks >= deal.level;
+  const taken = deal.whistlers.length === 0 || declarerTricks >= deal.level;
 
-  if (
-    deal.halfWhist !== undefined &&
-    (deal.level === 6 || deal.level === 7)
-  ) {
+  if (deal.halfWhist !== undefined && (deal.level === 6 || deal.level === 7)) {
     awardBullet(next, deal.declarer, price, bulletTarget);
     const halfShare = requiredWhistTricks(deal.level) / 2;
     next.whists[deal.halfWhist][deal.declarer] += price * halfShare;
@@ -135,23 +131,18 @@ export function scoreDeal(
   if (taken) {
     awardBullet(next, deal.declarer, price, bulletTarget);
   } else {
-    next.mountain[deal.declarer] +=
-      (deal.level - declarerTricks) * price;
+    next.mountain[deal.declarer] += (deal.level - declarerTricks) * price;
   }
 
   if (deal.whistlers.length === 1) {
     const whistler = deal.whistlers[0];
     if (whistler !== undefined) {
-      const defenseTricks = SEATS.reduce(
-        (sum, seat) =>
-          seat === deal.declarer ? sum : sum + deal.tricks[seat],
+      const defenseTricks = SEATS.reduce<number>(
+        (sum, seat) => (seat === deal.declarer ? sum : sum + deal.tricks[seat]),
         0,
       );
       next.whists[whistler][deal.declarer] += defenseTricks * price;
-      const short = Math.max(
-        0,
-        requiredWhistTricks(deal.level) - defenseTricks,
-      );
+      const short = Math.max(0, requiredWhistTricks(deal.level) - defenseTricks);
       if (short > 0) {
         next.mountain[whistler] += short * price;
       }
@@ -159,16 +150,14 @@ export function scoreDeal(
   } else {
     const pooledBlank =
       (deal.level === 8 || deal.level === 9) &&
-      deal.whistlers.reduce((sum, seat) => sum + deal.tricks[seat], 0) ===
-        0;
+      deal.whistlers.reduce<number>((sum, seat) => sum + deal.tricks[seat], 0) === 0;
     for (const whistler of deal.whistlers) {
       next.whists[whistler][deal.declarer] += deal.tricks[whistler] * price;
       const short = pooledBlank
         ? 1
         : Math.max(
             0,
-            whistShare(deal.level, whistler, deal.whistlers) -
-              deal.tricks[whistler],
+            whistShare(deal.level, whistler, deal.whistlers) - deal.tricks[whistler],
           );
       if (short > 0) {
         next.mountain[whistler] += short * price;
@@ -210,10 +199,7 @@ export function scoreTalonThrow(score: BulletScore, dealer: Seat): BulletScore {
   return withLast(score, next);
 }
 
-export function scoreSince(
-  baseline: BulletScore,
-  score: BulletScore,
-): BulletScore {
+export function scoreSince(baseline: BulletScore, score: BulletScore): BulletScore {
   return {
     bullet: score.bullet,
     mountain: score.mountain,
@@ -238,26 +224,17 @@ export function requiredWhistTricks(level: ContractLevel): number {
   return REQUIRED_WHIST_TRICKS[level];
 }
 
-export function isBulletComplete(
-  score: BulletScore,
-  bulletTarget: number,
-): boolean {
+export function isBulletComplete(score: BulletScore, bulletTarget: number): boolean {
   return score.bullet.every((entry) => entry >= bulletTarget);
 }
 
-export function settleBullet(
-  score: BulletScore,
-): [number, number, number] {
+export function settleBullet(score: BulletScore): [number, number, number] {
   const mountain: [number, number, number] = [...score.mountain];
   const whists: [
     [number, number, number],
     [number, number, number],
     [number, number, number],
-  ] = [
-    [...score.whists[0]],
-    [...score.whists[1]],
-    [...score.whists[2]],
-  ];
+  ] = [[...score.whists[0]], [...score.whists[1]], [...score.whists[2]]];
   let sum = mountain[0] + mountain[1] + mountain[2];
   const remainder = ((sum % 3) + 3) % 3;
   if (remainder !== 0) {
@@ -407,10 +384,6 @@ function mutableScore(score: BulletScore): MutableScore {
   return {
     bullet: [...score.bullet],
     mountain: [...score.mountain],
-    whists: [
-      [...score.whists[0]],
-      [...score.whists[1]],
-      [...score.whists[2]],
-    ],
+    whists: [[...score.whists[0]], [...score.whists[1]], [...score.whists[2]]],
   };
 }

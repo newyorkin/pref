@@ -323,7 +323,7 @@ describe("complete game state", () => {
       expect(again.state.score.bullet).toEqual([0, 0, 0]);
       expect(again.state.deals).toEqual([]);
     }
-    const views = [0, 1, 2].map((seat) => gameView(winningState!, seat));
+    const views = ([0, 1, 2] as const).map((seat) => gameView(winningState!, seat));
     expect(views[1].score).toEqual(views[0].score);
     expect(views[2].score).toEqual(views[0].score);
     expect(views[1].settlement).toEqual(views[0].settlement);
