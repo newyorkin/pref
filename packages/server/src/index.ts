@@ -117,6 +117,10 @@ export interface GameServerOptions {
   readonly sessionTtlMs?: number;
   readonly cookieSecure?: boolean;
   readonly publicOrigin?: string;
+  readonly heartbeatIntervalMs?: number;
+  readonly maxSocketPayload?: number;
+  readonly socketMessageLimit?: number;
+  readonly socketMessageWindowMs?: number;
   readonly authRateLimit?: { ip: number; name: number; windowMs: number };
 }
 
@@ -133,6 +137,7 @@ export class GameServer {
   private readonly socketUsers = new Map<WebSocket, number>();
   private readonly staticDir: string | null;
   private readonly dealSource: () => Deal;
+  private readonly heartbeatTimer: ReturnType<typeof setInterval>;
   private readonly sessionTtlMs: number;
   private readonly cookieSecure: boolean;
   private readonly authLimiter: AuthRateLimiter;
@@ -189,7 +194,15 @@ export class GameServer {
         else response.destroy();
       });
     });
-    this.socketServer = new WebSocketServer({ noServer: true });
+    this.socketServer = new WebSocketServer({ noServer: true, maxPayload: options.maxSocketPayload ?? 8_192 });
+    const alive = new WeakSet<WebSocket>();
+    this.heartbeatTimer = setInterval(() => {
+      for (const socket of this.socketServer.clients) {
+        if (!alive.has(socket)) { socket.terminate(); continue; }
+        alive.delete(socket); socket.ping();
+      }
+    }, options.heartbeatIntervalMs ?? 30_000);
+    this.heartbeatTimer.unref();
     this.httpServer.on("upgrade", (request, socket, head) => {
       if (!allowedOrigin(request, options.publicOrigin, this.cookieSecure)) {
         socket.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n"); return;
@@ -206,7 +219,19 @@ export class GameServer {
         return;
       }
       this.socketUsers.set(socket, userId);
+      alive.add(socket);
+      socket.on("pong", () => alive.add(socket));
+      socket.on("error", () => undefined); // ws reports malformed frames/payload overflow here.
+      let messageCount = 0;
+      let windowStart = this.now();
       socket.on("message", (data) => {
+        const now = this.now();
+        if (now - windowStart >= (options.socketMessageWindowMs ?? 5_000)) {
+          windowStart = now; messageCount = 0;
+        }
+        if (++messageCount > (options.socketMessageLimit ?? 50)) {
+          socket.close(1008, "Message rate exceeded"); return;
+        }
         if (this.authenticatedUser(request.headers.cookie) === null) {
           socket.close(1008, "Session expired"); return;
         }
@@ -302,6 +327,7 @@ export class GameServer {
 
   public async close(): Promise<void> {
     clearInterval(this.cleanupTimer);
+    clearInterval(this.heartbeatTimer);
     for (const socket of this.socketServer.clients) {
       socket.terminate();
     }

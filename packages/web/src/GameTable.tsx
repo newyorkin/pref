@@ -1,3 +1,4 @@
+import { useReconnectingSocket } from "./useReconnectingSocket.js";
 import {
   useEffect,
   useLayoutEffect,
@@ -276,88 +277,24 @@ export function GameTable({
 }): React.JSX.Element {
   const [snapshot, setSnapshot] = useState<SnapshotEnvelope | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const socket = useRef<WebSocket | null>(null);
   const snapshotRef = useRef<SnapshotEnvelope | null>(null);
   const inflightRef = useRef(false);
-  const connectRef = useRef<(() => void) | null>(null);
   const [occupiedSeats, setOccupiedSeats] = useState<boolean[] | null>(null);
   const [playerNames, setPlayerNames] = useState<(string | null)[] | null>(
     null,
   );
 
-  useEffect(() => {
-    let stopped = false;
-    let reconnectTimer: number | undefined;
-
-    function connect(): void {
-      if (stopped) {
-        return;
-      }
-      const currentSocket = socket.current;
-      if (
-        currentSocket !== null &&
-        (currentSocket.readyState === WebSocket.OPEN ||
-          currentSocket.readyState === WebSocket.CONNECTING)
-      ) {
-        return;
-      }
-      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const nextSocket = new WebSocket(
-        `${protocol}//${window.location.host}/ws`,
-      );
-      socket.current = nextSocket;
-      nextSocket.addEventListener("open", () => {
-        if (socket.current !== nextSocket) {
-          return;
-        }
-        nextSocket.send(
-          JSON.stringify({ type: "join", tableId, seat }),
-        );
-      });
-      nextSocket.addEventListener("message", (event) => {
-        if (socket.current !== nextSocket) {
-          return;
-        }
-        void readSocketPayload(event.data)
-          .then((message) => {
-            const next = nextClientState(
-              message,
-              snapshotRef.current,
-              tableId,
-            );
-            inflightRef.current = false;
-            if (next.snapshot !== null) {
-              snapshotRef.current = next.snapshot;
-              setSnapshot(next.snapshot);
-            }
-            setError(next.error);
-          })
-          .catch(() => {
-            inflightRef.current = false;
-            setError("Не удалось прочитать ответ стола");
-          });
-      });
-      nextSocket.addEventListener("close", () => {
-        if (stopped || socket.current !== nextSocket) {
-          return;
-        }
-        reconnectTimer = window.setTimeout(connect, 250);
-      });
-    }
-
-    connectRef.current = connect;
-    const startTimer = window.setTimeout(connect, 0);
-    return () => {
-      stopped = true;
-      connectRef.current = null;
-      window.clearTimeout(startTimer);
-      if (reconnectTimer !== undefined) {
-        window.clearTimeout(reconnectTimer);
-      }
-      socket.current?.close();
-      socket.current = null;
-    };
-  }, [seat, tableId]);
+  const { socket, reconnect } = useReconnectingSocket(`game:${tableId}:${seat}`, true, {
+    onOpen: ws => ws.send(JSON.stringify({ type: "join", tableId, seat })),
+    onMessage: event => {
+      void readSocketPayload(event.data).then(message => {
+        const next = nextClientState(message, snapshotRef.current, tableId);
+        inflightRef.current = false;
+        if (next.snapshot !== null) { snapshotRef.current = next.snapshot; setSnapshot(next.snapshot); }
+        setError(next.error);
+      }).catch(() => { inflightRef.current = false; setError("Не удалось прочитать ответ стола"); });
+    },
+  });
 
   useEffect(() => {
     let stopped = false;
@@ -405,7 +342,7 @@ export function GameTable({
       currentSocket.readyState !== WebSocket.OPEN
     ) {
       setError("Нет связи со столом. Переподключаемся…");
-      connectRef.current?.();
+      reconnect();
       return;
     }
     inflightRef.current = true;
