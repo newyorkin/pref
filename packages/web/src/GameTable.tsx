@@ -30,7 +30,6 @@ interface GameAction {
   card?: Card;
   cards?: [Card, Card];
   index?: 0 | 1;
-  seed?: number;
   tricks?: number;
   answer?: "agree" | "decline";
   bid?: AuctionBid;
@@ -617,7 +616,7 @@ export function GameSnapshotPanel({
             <button
               type="button"
               onClick={() =>
-                onAction({ type: "rematch", seed: Date.now() })
+                onAction({ type: "rematch" })
               }
             >
               Сыграть ещё раз

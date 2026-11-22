@@ -314,7 +314,6 @@ describe("complete game state", () => {
     expect(gameView(winningState!, 1).deals).toEqual(winningState!.deals);
     const again = applyGameAction(winningState!, 2, {
       type: "rematch",
-      seed: 5,
     });
     expect(again.accepted).toBe(true);
     if (again.accepted) {

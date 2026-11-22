@@ -23,6 +23,7 @@ import {
   playCard,
   view,
   type Card,
+  type Deal,
   type GameAction,
   type GameSeatView,
   type GameState,
@@ -32,6 +33,7 @@ import {
   type TrickPlayState,
 } from "@pref/engine";
 import WebSocket, { WebSocketServer } from "ws";
+import { secureDeal } from "./dealing.js";
 
 export interface PlayCardCommand {
   readonly tableId: string;
@@ -122,6 +124,7 @@ interface Subscription {
 export interface GameServerOptions {
   readonly databasePath?: string;
   readonly staticDir?: string;
+  readonly dealSource?: () => Deal;
 }
 
 export class GameServer {
@@ -132,8 +135,10 @@ export class GameServer {
   private readonly subscriptions = new Map<WebSocket, Subscription>();
   private readonly socketUsers = new Map<WebSocket, number>();
   private readonly staticDir: string | null;
+  private readonly dealSource: () => Deal;
 
   public constructor(options: GameServerOptions = {}) {
+    this.dealSource = options.dealSource ?? secureDeal;
     this.staticDir =
       options.staticDir === undefined ? null : path.resolve(options.staticDir);
     this.database = new DatabaseSync(options.databasePath ?? ":memory:");
@@ -561,20 +566,15 @@ export class GameServer {
         this.sendJson(response, 409, { error: "confirmationsNeeded" });
         return;
       }
-      let seed = Date.now();
+      // Legacy client seeds never influence a server deal.
       const rawBody = await readRequestBody(request);
       if (rawBody.length > 0) {
-        try {
-          const body = JSON.parse(rawBody) as unknown;
-          if (isRecord(body) && typeof body.seed === "number") {
-            seed = body.seed;
-          }
-        } catch {
+        try { JSON.parse(rawBody); } catch {
           this.sendJson(response, 400, { error: "invalidJson" });
           return;
         }
       }
-      table.state = createGame(table.settings, seed);
+      table.state = createGame(table.settings, this.dealSource());
       table.dealt = true;
       this.sendJson(
         response,
@@ -925,6 +925,7 @@ export class GameServer {
             table.state,
             command.seat,
             command.payload.action,
+            this.dealSource,
           )
         : {
             accepted: false as const,
@@ -1157,7 +1158,7 @@ function isGameAction(value: unknown): value is GameAction {
     return value.answer === "agree" || value.answer === "decline";
   }
   if (value.type === "rematch") {
-    return Number.isSafeInteger(value.seed);
+    return !("seed" in value);
   }
   if (value.type === "openTalon") {
     return value.index === 0 || value.index === 1;

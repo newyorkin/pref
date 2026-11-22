@@ -747,7 +747,6 @@ function TableLobby({ tableId }: { tableId: string }): React.JSX.Element {
     try {
       const response = await api(`/tables/${tableId}/deal`, {
         method: "POST",
-        body: JSON.stringify({ seed: Date.now() }),
       });
       if (!response.ok) {
         setError("Не удалось сдать");
