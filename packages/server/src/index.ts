@@ -34,6 +34,7 @@ import {
 } from "@pref/engine";
 import WebSocket, { WebSocketServer } from "ws";
 import { secureDeal } from "./dealing.js";
+import { createTableSchema, loadTables, writeTable, cloneTable, type Table } from "./tables.js";
 
 export interface PlayCardCommand {
   readonly tableId: string;
@@ -104,18 +105,6 @@ export type ServerMessage = SnapshotMessage | RejectionMessage | TableMessage;
 
 export type TableFormSettings = TableSettings;
 
-interface Table {
-  state: TrickPlayState | GameState | null;
-  version: number;
-  readonly actionIds: Set<string>;
-  readonly players: [number | null, number | null, number | null];
-  readonly hostUserId: number | null;
-  settings: TableFormSettings;
-  settingsRevision: number;
-  dealt: boolean;
-  confirmed: [boolean, boolean, boolean];
-}
-
 interface Subscription {
   readonly tableId: string;
   readonly seat: Seat;
@@ -125,13 +114,21 @@ export interface GameServerOptions {
   readonly databasePath?: string;
   readonly staticDir?: string;
   readonly dealSource?: () => Deal;
+  readonly now?: () => number;
+  readonly tableTtlMs?: number;
+  readonly finishedTableTtlMs?: number;
+  readonly cleanupIntervalMs?: number;
 }
 
 export class GameServer {
   private readonly database: DatabaseSync;
   private readonly httpServer: Server;
   private readonly socketServer: WebSocketServer;
-  private readonly tables = new Map<string, Table>();
+  private readonly tables: Map<string, Table>;
+  private readonly now: () => number;
+  private readonly tableTtlMs: number;
+  private readonly finishedTableTtlMs: number;
+  private readonly cleanupTimer: ReturnType<typeof setInterval>;
   private readonly subscriptions = new Map<WebSocket, Subscription>();
   private readonly socketUsers = new Map<WebSocket, number>();
   private readonly staticDir: string | null;
@@ -139,6 +136,9 @@ export class GameServer {
 
   public constructor(options: GameServerOptions = {}) {
     this.dealSource = options.dealSource ?? secureDeal;
+    this.now = options.now ?? Date.now;
+    this.tableTtlMs = options.tableTtlMs ?? 30 * 86_400_000;
+    this.finishedTableTtlMs = options.finishedTableTtlMs ?? 7 * 86_400_000;
     this.staticDir =
       options.staticDir === undefined ? null : path.resolve(options.staticDir);
     this.database = new DatabaseSync(options.databasePath ?? ":memory:");
@@ -166,8 +166,17 @@ export class GameServer {
       )
     `);
 
+    createTableSchema(this.database);
+    this.tables = loadTables(this.database);
+    this.pruneExpiredTables();
+    this.cleanupTimer = setInterval(() => this.pruneExpiredTables(), options.cleanupIntervalMs ?? 60_000);
+    this.cleanupTimer.unref();
+
     this.httpServer = createServer((request, response) => {
-      void this.handleHttp(request, response);
+      void this.handleHttp(request, response).catch(() => {
+        if (!response.headersSent) this.sendJson(response, 500, { error: "internalError" });
+        else response.destroy();
+      });
     });
     this.socketServer = new WebSocketServer({ server: this.httpServer });
     this.socketServer.on("connection", (socket, request) => {
@@ -178,7 +187,9 @@ export class GameServer {
       }
       this.socketUsers.set(socket, userId);
       socket.on("message", (data) => {
-        this.handleMessage(socket, data.toString());
+        try { this.handleMessage(socket, data.toString()); } catch {
+          this.send(socket, { type: "rejected", reason: "internalError" });
+        }
       });
       socket.on("close", () => {
         this.subscriptions.delete(socket);
@@ -194,7 +205,7 @@ export class GameServer {
     if (this.tables.has(tableId)) {
       throw new Error(`Table already exists: ${tableId}`);
     }
-    this.tables.set(tableId, {
+    this.persistTable(tableId, {
       state,
       version: 0,
       actionIds: new Set(),
@@ -267,6 +278,7 @@ export class GameServer {
   }
 
   public async close(): Promise<void> {
+    clearInterval(this.cleanupTimer);
     for (const socket of this.socketServer.clients) {
       socket.terminate();
     }
@@ -437,7 +449,7 @@ export class GameServer {
         return;
       }
       const tableId = randomBytes(8).toString("hex");
-      this.tables.set(tableId, {
+      this.persistTable(tableId, {
         state: null,
         version: 0,
         actionIds: new Set(),
@@ -466,7 +478,8 @@ export class GameServer {
       return;
     }
     const [, tableId, action] = tableRoute;
-    const table = this.tables.get(tableId);
+    const storedTable = this.tables.get(tableId);
+    const table = storedTable === undefined ? undefined : cloneTable(storedTable);
     if (table === undefined) {
       this.sendJson(response, 404, { error: "tableNotFound" });
       return;
@@ -491,6 +504,7 @@ export class GameServer {
         }
         table.players[seat] = userId;
       }
+      this.persistTable(tableId, table);
       this.sendJson(response, 200, {
         ...this.tableResponse(tableId, table, userId),
         seat,
@@ -518,6 +532,7 @@ export class GameServer {
       table.settings = settings;
       table.settingsRevision += 1;
       table.confirmed = [false, false, false];
+      this.persistTable(tableId, table);
       this.sendJson(
         response,
         200,
@@ -548,6 +563,7 @@ export class GameServer {
       ];
       confirmed[seat] = true;
       table.confirmed = confirmed;
+      this.persistTable(tableId, table);
       this.sendJson(response, 200, this.tableResponse(tableId, table, userId));
       this.notifyLobby(tableId);
       return;
@@ -576,6 +592,7 @@ export class GameServer {
       }
       table.state = createGame(table.settings, this.dealSource());
       table.dealt = true;
+      this.persistTable(tableId, table);
       this.sendJson(
         response,
         200,
@@ -804,7 +821,8 @@ export class GameServer {
   }
 
   private join(socket: WebSocket, message: JoinMessage): void {
-    const table = this.tables.get(message.tableId);
+    const storedTable = this.tables.get(message.tableId);
+    const table = storedTable === undefined ? undefined : cloneTable(storedTable);
     if (table === undefined) {
       this.send(socket, {
         type: "rejected",
@@ -847,6 +865,7 @@ export class GameServer {
       return;
     }
     table.players[seat] = userId;
+    this.persistTable(message.tableId, table);
     this.subscriptions.set(socket, {
       tableId: message.tableId,
       seat,
@@ -948,32 +967,67 @@ export class GameServer {
       return;
     }
 
-    table.state = transition.state;
-    table.version += 1;
-    table.actionIds.add(command.actionId);
-    this.logCommand(command, "accepted", table.version);
-    this.broadcast(command.tableId, table);
+    const next = cloneTable(table);
+    next.state = transition.state;
+    next.version += 1;
+    next.actionIds.add(command.actionId);
+    this.persistTable(command.tableId, next, () => this.logCommand(command, "accepted", next.version));
+    this.broadcast(command.tableId, next);
   }
 
   private rejectCommand(
-    socket: WebSocket,
-    table: Table,
-    command: ClientCommand,
-    reason: string,
+    socket: WebSocket, table: Table, command: ClientCommand, reason: string,
     snapshotSeat: Seat | undefined = command.seat,
   ): void {
-    table.actionIds.add(command.actionId);
-    this.logCommand(command, `rejected:${reason}`, table.version);
+    const next = cloneTable(table);
+    next.actionIds.add(command.actionId);
+    this.persistTable(command.tableId, next, () => this.logCommand(command, `rejected:${reason}`, next.version));
     this.send(socket, {
-      type: "rejected",
-      tableId: command.tableId,
-      actionId: command.actionId,
-      version: table.version,
-      reason,
-      ...(snapshotSeat === undefined || table.state === null
-        ? {}
-        : { state: projectState(table.state, snapshotSeat) }),
+      type: "rejected", tableId: command.tableId, actionId: command.actionId,
+      version: next.version, reason,
+      ...(snapshotSeat === undefined || next.state === null ? {} : { state: projectState(next.state, snapshotSeat) }),
     });
+  }
+
+  private persistTable(id: string, table: Table, log?: () => void): void {
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      writeTable(this.database, id, table, this.now());
+      log?.();
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+    this.tables.set(id, table);
+  }
+
+  public pruneExpiredTables(): void {
+    const now = this.now();
+    const rows = this.database.prepare("SELECT id, updated_at FROM tables").all();
+    const expired = rows.filter(row => {
+      const state = this.tables.get(String(row.id))?.state;
+      const ttl = state && isGameState(state) && state.phase === "finished" ? this.finishedTableTtlMs : this.tableTtlMs;
+      return Number(row.updated_at) <= now - ttl;
+    });
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      for (const row of expired) {
+        this.database.prepare("DELETE FROM command_log WHERE table_id = ?").run(row.id);
+        this.database.prepare("DELETE FROM tables WHERE id = ?").run(row.id);
+      }
+      this.database.exec("COMMIT");
+    } catch (error) { this.database.exec("ROLLBACK"); throw error; }
+    for (const row of expired) {
+      const id = String(row.id);
+      this.tables.delete(id);
+      for (const [socket, subscription] of this.subscriptions) {
+        if (subscription.tableId === id) {
+          this.send(socket, { type: "rejected", tableId: id, reason: "tableExpired" });
+          this.subscriptions.delete(socket);
+        }
+      }
+    }
   }
 
   private broadcast(tableId: string, table: Table): void {
@@ -1022,7 +1076,7 @@ export class GameServer {
   ): void {
     this.database
       .prepare(`
-        INSERT INTO command_log (
+        INSERT OR IGNORE INTO command_log (
           table_id,
           action_id,
           seat,
