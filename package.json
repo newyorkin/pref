@@ -7,7 +7,8 @@
   },
   "scripts": {
     "dev": "pnpm --parallel --filter @pref/server --filter @pref/web run dev",
-    "test": "pnpm --recursive --if-present test"
+    "test": "pnpm --recursive --if-present test",
+    "typecheck": "pnpm --recursive exec tsc --noEmit"
   },
   "devDependencies": {
     "typescript": "^5.9.3",
