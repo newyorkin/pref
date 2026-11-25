@@ -83,6 +83,7 @@ export interface Subscription {
 }
 
 export interface GameServerOptions {
+  readonly localTestMode?: boolean;
   readonly databasePath?: string;
   readonly staticDir?: string;
   readonly dealSource?: () => Deal;

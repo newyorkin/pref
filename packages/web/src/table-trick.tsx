@@ -1,5 +1,12 @@
 import { PlayingCard } from "./table-cards.js";
+import { finishedTrick } from "./profile.js";
 import type { GameSnapshot } from "./table-types.js";
+
+export function finishedTrickDisplay(previous: GameSnapshot, next: GameSnapshot) {
+  if (previous.dealNumber !== next.dealNumber) return null;
+  const cards = finishedTrick(previous, next);
+  return cards === null ? null : { cards, prikup: previous.prikup ?? [] };
+}
 
 export function CurrentTrick({
   tableTrick,

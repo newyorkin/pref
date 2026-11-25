@@ -11,6 +11,7 @@ import { authenticatedUser, handleAuth, type AuthContext } from "./auth.js";
 import { migrateDatabase } from "./db.js";
 import { isApiPath, sendJson } from "./http.js";
 import { handleLobby, tableDetails } from "./lobby.js";
+import { LocalTestTables, isLoopback } from "./local-test.js";
 import type {
   ClientCommand,
   GameServerOptions,
@@ -58,6 +59,7 @@ import { secureDeal } from "./dealing.js";
 import { cloneTable, loadTables, writeTable, type Table } from "./tables.js";
 
 export class GameServer {
+  private readonly localTestTables: LocalTestTables | null;
   private readonly database: DatabaseSync;
   private readonly httpServer: Server;
   private readonly socketServer: WebSocketServer;
@@ -81,6 +83,7 @@ export class GameServer {
     this.cookieSecure = options.cookieSecure ?? process.env.COOKIE_SECURE === "1";
     this.authLimiter = new AuthRateLimiter(options.authRateLimit);
     this.now = options.now ?? Date.now;
+    this.localTestTables = options.localTestMode ? new LocalTestTables(this.dealSource, this.now) : null;
     this.tableTtlMs = options.tableTtlMs ?? 30 * 86_400_000;
     this.finishedTableTtlMs = options.finishedTableTtlMs ?? 7 * 86_400_000;
     this.staticDir =
@@ -168,6 +171,9 @@ export class GameServer {
   }
 
   public async listen(port = 0, host = "127.0.0.1"): Promise<void> {
+    if (this.localTestTables !== null && !isLoopback(host)) {
+      throw new Error("LOCAL_TEST_MODE requires a loopback HOST (127.0.0.1)");
+    }
     await new Promise<void>((resolve, reject) => {
       const onError = (error: Error): void => {
         this.httpServer.off("listening", onListening);
@@ -223,6 +229,11 @@ export class GameServer {
     response: ServerResponse,
   ): Promise<void> {
     const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
+    if (pathname.startsWith("/local-test/")) {
+      if (this.localTestTables === null) sendJson(response, 404, { error: "notFound" });
+      else await this.localTestTables.handle(request, response, pathname);
+      return;
+    }
     if (await handleAuth(request, response, pathname, this.authContext)) return;
     const userId = authenticatedUser(
       request.headers.cookie,

@@ -859,6 +859,18 @@ function TableLobby({ tableId }: { tableId: string }): React.JSX.Element {
   );
 }
 
+function LocalTestLink() {
+  const [enabled, setEnabled] = useState(false);
+  useEffect(() => {
+    let active = true;
+    void fetch("/local-test/status").then(response => {
+      if (active) setEnabled(response.ok);
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, []);
+  return enabled ? <a className="local-test-entry" href="/testing">Тест втроём в одной вкладке</a> : null;
+}
+
 export default function App(): React.JSX.Element {
   const [authenticated, setAuthenticated] = useState<boolean | null>(null);
   const [playerName, setPlayerName] = useState<string | null>(null);
@@ -913,6 +925,7 @@ export default function App(): React.JSX.Element {
 
   return (
     <DisplayProfileProvider playerId={playerId}>
+      {tableId === undefined && createdTable === null ? <LocalTestLink /> : null}
       {authenticated === true ? (
         <div className="player-bar">
           <ProfileMenu />
