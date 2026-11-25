@@ -7,6 +7,10 @@
   --green: #1b4d38;
   --suit-red: #9d3a3a;
   --table-foot: 8.2rem;
+  /* Keep a separate row for the raspas talon above the three seat positions. */
+  --trick-h: min(calc(4.8rem * var(--card-scale, 1)), max(2.6rem, calc((100dvh - var(--table-foot) - 18rem) / 4)));
+  --trick-w: calc(var(--trick-h) * 0.70833333);
+  --trick-gap: 0.7rem;
   box-sizing: border-box;
   min-height: 100dvh;
   display: flex;
@@ -828,6 +832,16 @@ button.pc {
   transform: translate(-50%, -50%);
 }
 
+.prikup.raspas-prikup-play {
+  position: relative;
+}
+
+.prikup.raspas-prikup-play .pc,
+.prikup.raspas-prikup-play .prikup-back {
+  width: var(--trick-w);
+  height: var(--trick-h);
+}
+
 .prikup-back {
   width: 3.4rem;
   height: 4.8rem;
@@ -928,28 +942,26 @@ span.prikup-back {
   gap: 0.45rem;
 }
 
+.table-play {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0 0 auto;
+}
+
 .trick .pc {
   width: 3.4rem;
   height: 4.8rem;
 }
 
-.trick-play {
-  --trick-w: calc(3.4rem * var(--card-scale, 1));
-  --trick-h: calc(4.8rem * var(--card-scale, 1));
-  --trick-gap: calc(0.7rem * var(--card-scale, 1));
-  --trick-lift: calc(2.2rem * var(--card-scale, 1));
-}
-
 section.trick.trick-play {
-  position: fixed;
+  position: relative;
   z-index: 4;
-  left: 50%;
-  top: calc(50% - var(--table-foot) / 2);
   display: block;
-  width: calc(var(--trick-w) * 2 + var(--trick-gap));
-  height: calc(var(--trick-h) + var(--trick-lift));
+  width: calc(var(--trick-w) * 3 + var(--trick-gap) * 2);
+  height: calc(var(--trick-h) * 2 + var(--trick-gap));
   margin: 0;
-  transform: translate(-50%, -50%);
 }
 
 .trick-play .pc,
@@ -959,36 +971,20 @@ section.trick.trick-play {
   height: var(--trick-h);
 }
 
-.trick-play .trick-at-0,
-.trick-play .trick-at-1 {
-  top: calc(var(--trick-lift) / 2);
-}
-
-.trick-play .trick-at-0 {
+.trick-play .trick-at-left {
+  top: 0;
   left: 0;
 }
 
-.trick-play .trick-at-1 {
+.trick-play .trick-at-right {
+  top: 0;
   right: 0;
 }
 
-.trick-play .trick-at-0:only-child {
+.trick-play .trick-at-me {
+  bottom: 0;
   left: 50%;
   margin-left: calc(var(--trick-w) / -2);
-}
-
-.trick-play .trick-at-2 {
-  left: 50%;
-  z-index: 2;
-  margin-left: calc(var(--trick-w) / -2);
-}
-
-.trick-play[data-third="above"] .trick-at-2 {
-  top: 0;
-}
-
-.trick-play[data-third="below"] .trick-at-2 {
-  top: var(--trick-lift);
 }
 
 .trick.trick-with-talon {
@@ -1388,6 +1384,11 @@ section.trick.trick-play {
 }
 
 @media (max-width: 640px) {
+  .game-screen {
+    /* Desktop card scaling must not consume the narrow screen's control area. */
+    --trick-h: min(4.8rem, max(2.6rem, calc((100dvh - var(--table-foot) - 18rem) / 4)));
+  }
+
   .game-title {
     font-size: 1.6rem;
   }
@@ -1614,13 +1615,6 @@ section.trick.trick-play {
   .trick .pc {
     width: calc(3.4rem * var(--card-scale, 1));
     height: calc(4.8rem * var(--card-scale, 1));
-  }
-
-  .trick-play {
-    --trick-w: calc(3.4rem * var(--card-scale, 1));
-    --trick-h: calc(4.8rem * var(--card-scale, 1));
-    --trick-gap: calc(0.7rem * var(--card-scale, 1));
-    --trick-lift: calc(2.2rem * var(--card-scale, 1));
   }
 
   .trick-play .pc,

@@ -8,19 +8,6 @@ import type {
   GameSnapshot,
 } from "./table-types.js";
 
-export function thirdCardSide(
-  played: GameSnapshot["currentTrick"][number] | undefined,
-): "above" | "below" {
-  if (played === undefined || "faceDown" in played.card) {
-    return played !== undefined && played.seat % 2 === 0 ? "above" : "below";
-  }
-  const salt = [...played.card.suit].reduce(
-    (sum, char) => sum + char.charCodeAt(0),
-    played.card.rank * 13 + played.seat,
-  );
-  return salt % 2 === 0 ? "above" : "below";
-}
-
 export function trickCount(count: number): string {
   const mod10 = count % 10;
   const mod100 = count % 100;

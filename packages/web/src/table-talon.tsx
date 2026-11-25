@@ -15,7 +15,11 @@ export function Talon({
       {" "}
       {(state.prikup ?? []).length === 0 ? null : (
         <section
-          className={state.phase === "raspas" ? "prikup raspas-prikup" : "prikup"}
+          className={
+            state.phase === "raspas"
+              ? "prikup raspas-prikup"
+              : "prikup raspas-prikup-play"
+          }
           aria-label="Прикуп"
         >
           <div className="prikup-row">

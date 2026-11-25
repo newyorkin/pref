@@ -512,8 +512,10 @@ export function GameSnapshotPanel({
         <p className="contract-banner">Откройте прикуп</p>
       ) : null}
 
-      <Talon state={state} sharedTalon={sharedTalon} onAction={onAction} />
-      <CurrentTrick tableTrick={tableTrick} trump={trump} />
+      <div className={state.phase === "play" ? "table-play" : undefined}>
+        <Talon state={state} sharedTalon={sharedTalon} onAction={onAction} />
+        <CurrentTrick tableTrick={tableTrick} trump={trump} viewer={seat} />
+      </div>
       <aside className="trick-dock" aria-label="Взятки">
         <SeatTriangle
           viewer={seat}
