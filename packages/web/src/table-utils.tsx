@@ -45,7 +45,12 @@ export function shownBubble(
   word: string | undefined,
   phase: string,
 ): string | undefined {
-  if (phase === "play" && word === "вист") {
+  if (
+    (phase === "play" || phase === "raspas") &&
+    word !== undefined &&
+    (["пас", "мизер", "вист", "полвиста", "всветлую", "втёмную"].includes(word) ||
+      /^(6|7|8|9|10) (пик|треф|бубен|червей|без козыря)$/.test(word))
+  ) {
     return undefined;
   }
   return word;

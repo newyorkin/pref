@@ -428,7 +428,7 @@ describe("table form", () => {
       />,
     );
     expect(play).not.toContain("game-screen-auction");
-    expect(play).not.toContain("Ваш ход");
+    expect(play).toContain("Ваш ход");
     expect(play).toContain("seat-corner-me seat-corner-turn");
     expect(play).toContain(
       'class="game-title">6 <span class="bid-red">♥</span>',
@@ -1837,8 +1837,9 @@ describe("table form", () => {
     );
 
     expect(markup).not.toContain('class="speech-bubble">вист');
-    expect(markup).toContain('class="speech-bubble">пас');
+    expect(markup).not.toContain('class="speech-bubble">пас');
     expect(markup).toContain("Борис: вист");
+    expect(markup).toContain("Вера: пас");
   });
 });
 

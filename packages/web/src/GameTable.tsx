@@ -396,6 +396,7 @@ export function GameSnapshotPanel({
   const dealer = (state.dealNumber + 2) % 3;
   const gap = emptySeatMessage(occupiedSeats, state.auction.turn);
   const spoken = wordsOnStep(state.speech, state.speechStep);
+  const playTurn = state.phase === "play" ? state.turn : null;
 
   return (
     <main
@@ -466,6 +467,7 @@ export function GameSnapshotPanel({
             trump={trump}
             onAction={playNow}
             word={shownBubble(spoken.get(leftSeat), state.phase)}
+            isTurn={playTurn === leftSeat}
           />
           <Opponent
             place={rightSeat}
@@ -481,6 +483,7 @@ export function GameSnapshotPanel({
             trump={trump}
             onAction={playNow}
             word={shownBubble(spoken.get(rightSeat), state.phase)}
+            isTurn={playTurn === rightSeat}
           />
         </section>
       )}
@@ -562,6 +565,7 @@ export function GameSnapshotPanel({
         )}
       </aside>
 
+      {playTurn === seat ? <p className="turn-indicator" role="status">Ваш ход</p> : null}
       <div className="hand-seat">
         <ActionPanel
           state={state}
