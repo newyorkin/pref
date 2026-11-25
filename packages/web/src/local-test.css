@@ -1,0 +1,76 @@
+.local-test-entry {
+  position: fixed;
+  top: 1rem;
+  left: 1rem;
+  z-index: 20;
+  color: #d9e6b0;
+}
+.local-test-shell {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100dvh;
+}
+.local-test-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  background: #102c22;
+  color: #f0eadb;
+  z-index: 30;
+}
+.local-test-bar button,
+.local-test-bar a {
+  padding: 0.4rem 0.6rem;
+  color: inherit;
+}
+.local-test-bar button {
+  background: #274d3b;
+  border: 1px solid #809478;
+  border-radius: 0.3rem;
+  cursor: pointer;
+}
+.local-test-bar button[aria-pressed="true"] {
+  background: #e2ce8a;
+  color: #122a20;
+}
+.local-test-bar button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.local-test-bar [role="group"] {
+  display: flex;
+  gap: 0.25rem;
+}
+.local-test-bar label {
+  display: flex;
+  gap: 0.25rem;
+  align-items: center;
+}
+.local-test-stage {
+  min-height: 0;
+  overflow: auto;
+  contain: layout;
+  container-type: size;
+}
+.local-test-stage > div:not([hidden]) {
+  height: 100%;
+}
+.local-test-stage .game-screen {
+  min-height: 100%;
+  padding-top: 1.1rem;
+  --trick-h: min(calc(4.8rem * var(--card-scale, 1)), max(2.6rem, calc((100cqh - var(--table-foot) - 22rem) / 4)));
+}
+.local-test-stage [hidden] {
+  display: none;
+}
+@media (max-width: 640px) {
+  .local-test-stage .game-screen {
+    --trick-h: min(4.8rem, max(2.6rem, calc((100cqh - var(--table-foot) - 22rem) / 4)));
+  }
+  .local-test-bar {
+    font-size: 0.8rem;
+    gap: 0.3rem;
+  }
+}

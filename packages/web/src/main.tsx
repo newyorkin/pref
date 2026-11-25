@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
 import App from "./App.js";
+import LocalTestTable from "./LocalTestTable.js";
 
 const root = document.getElementById("root");
 if (root === null) {
@@ -10,6 +11,6 @@ if (root === null) {
 
 createRoot(root).render(
   <StrictMode>
-    <App />
+    {window.location.pathname === "/testing" ? <LocalTestTable /> : <App />}
   </StrictMode>,
 );

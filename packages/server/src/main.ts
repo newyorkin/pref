@@ -4,6 +4,7 @@ const port = Number(process.env.PORT ?? 3001);
 const host = process.env.HOST ?? "127.0.0.1";
 const staticDir = process.env.STATIC_DIR;
 const server = createGameServer({
+  localTestMode: process.env.LOCAL_TEST_MODE === "1",
   cookieSecure: process.env.COOKIE_SECURE === "1",
   publicOrigin: process.env.PUBLIC_ORIGIN,
   databasePath: process.env.DATABASE_PATH ?? "pref.sqlite",
