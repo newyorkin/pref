@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, test } from "vitest";
-import { CurrentTrick } from "./table-trick.js";
+import { CurrentTrick, finishedTrickDisplay } from "./table-trick.js";
 import { Talon } from "./table-talon.js";
 import type { GameSnapshot } from "./table-types.js";
 
@@ -10,6 +10,77 @@ const cards = [
   { seat: 2, card: { suit: "diamonds", rank: 9 } },
 ];
 const labels = ["7 ♠", "8 ♥", "9 ♦"];
+
+describe("raspas trick pause", () => {
+  const first = { suit: "clubs", rank: 14 };
+  const second = { suit: "hearts", rank: 12 };
+
+  test.each([0, 1, 2])("retains the talon of completed trick %i", (index) => {
+    const history = Array.from({ length: index }, () => ({ winner: 0, cards }));
+    const previous = {
+      phase: "play",
+      dealNumber: 0,
+      currentTrick: cards.slice(0, 2),
+      trickHistory: history,
+      prikup: index === 0 ? [first, { faceDown: true }] : index === 1 ? [second] : [],
+    } as GameSnapshot;
+    const next = {
+      ...previous,
+      currentTrick: [],
+      trickHistory: [...history, { winner: 0, cards }],
+      prikup: index === 0 ? [second] : [],
+    } as GameSnapshot;
+    const held = finishedTrickDisplay(previous, next);
+    expect(held?.cards).toEqual(cards);
+    expect(held?.prikup).toEqual(previous.prikup);
+    const duringPause = renderToStaticMarkup(
+      <>
+        <Talon
+          state={{ ...next, prikup: held!.prikup }}
+          sharedTalon={false}
+          onAction={() => undefined}
+        />
+        <CurrentTrick viewer={0} tableTrick={held!.cards} trump={null} />
+      </>,
+    );
+    expect(duringPause.match(/trick-at-/g)).toHaveLength(3);
+    if (index === 0) {
+      expect(duringPause).toContain('aria-label="Т ♣"');
+      expect(duringPause).toContain('aria-label="Рубашка прикупа"');
+      expect(duringPause).not.toContain('aria-label="Д ♥"');
+    } else if (index === 1) {
+      expect(duringPause).toContain('aria-label="Д ♥"');
+      expect(duringPause).not.toContain('aria-label="Т ♣"');
+    } else {
+      expect(duringPause).not.toContain('aria-label="Прикуп"');
+    }
+    // Releasing or skipping the pause renders the current server state.
+    const afterPause = renderToStaticMarkup(
+      <Talon state={next} sharedTalon={false} onAction={() => undefined} />,
+    );
+    expect(afterPause).not.toContain('aria-label="Т ♣"');
+    if (index > 0) expect(afterPause).not.toContain('aria-label="Прикуп"');
+    expect(next.trickHistory.at(-1)?.cards).toHaveLength(3);
+  });
+
+  test("does not retain a talon without a completed trick or across deals", () => {
+    const previous = {
+      dealNumber: 0,
+      currentTrick: cards.slice(0, 2),
+      trickHistory: [],
+      prikup: [first],
+    } as unknown as GameSnapshot;
+    expect(finishedTrickDisplay(previous, previous)).toBeNull();
+    expect(
+      finishedTrickDisplay(previous, {
+        ...previous,
+        dealNumber: 1,
+        currentTrick: [],
+        trickHistory: [{ winner: 0, cards }],
+      }),
+    ).toBeNull();
+  });
+});
 
 describe.each([0, 1, 2])("trick seen from seat %i", (viewer) => {
   test.each([0, 1, 2])(
