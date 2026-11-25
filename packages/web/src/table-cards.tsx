@@ -35,6 +35,7 @@ export function Opponent({
   trump,
   onAction,
   word,
+  isTurn = false,
 }: {
   place: number;
   name: string | null;
@@ -45,6 +46,7 @@ export function Opponent({
   trump: string | null;
   onAction: (action: GameAction) => void;
   word: string | undefined;
+  isTurn?: boolean;
 }): React.JSX.Element {
   const profile = useDisplayProfile();
   const visible = sortHand(openCards, "asc", profile.suitOrder);
@@ -97,6 +99,11 @@ export function Opponent({
       )}
       <p className="opponent-name">
         {name ?? (empty ? "свободно" : `Место ${place + 1}`)}
+        {isTurn ? (
+          <span className="opponent-turn" role="status">
+            Ходит
+          </span>
+        ) : null}
       </p>
       <p className="opponent-meta">{cardsLabel(cards)}</p>
     </div>

@@ -176,6 +176,32 @@ body:has(.game-screen) {
   font-size: 0.84rem;
 }
 
+.turn-indicator,
+.opponent-turn {
+  border: 1px solid #e4d193;
+  border-radius: 0.5rem;
+  background: #f1e4b9;
+  color: #173c2b;
+  font-weight: 700;
+}
+
+.turn-indicator {
+  position: fixed;
+  right: 1rem;
+  bottom: calc(var(--table-foot) + 0.5rem);
+  z-index: 7;
+  margin: 0;
+  padding: 0.3rem 0.75rem;
+  pointer-events: none;
+}
+
+.opponent-turn {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0.12rem 0.4rem;
+  font-size: 0.75rem;
+}
+
 .backs {
   display: flex;
   min-height: 3.4rem;
