@@ -2117,10 +2117,10 @@ describe("display profile", () => {
       css.indexOf("section.trick.trick-play {"),
       css.indexOf("}", css.indexOf("section.trick.trick-play {")),
     );
-    expect(trick).toContain("position: fixed");
-    expect(trick).toContain("left: 50%");
-    expect(trick).toContain("top: calc(50% - var(--table-foot) / 2)");
-    expect(trick).toContain("transform: translate(-50%, -50%)");
+    expect(trick).toContain("position: relative");
+    expect(trick).toContain("width: calc(var(--trick-w) * 3 + var(--trick-gap) * 2)");
+    expect(trick).toContain("height: calc(var(--trick-h) * 2 + var(--trick-gap))");
+    expect(trick).not.toContain("transform:");
     const desktop = css.slice(css.indexOf("@media (min-width: 641px)"));
     expect(desktop).toContain(
       "--table-foot: calc(7.4rem * var(--card-scale, 1))",
