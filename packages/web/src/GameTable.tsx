@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import type { TableSettings } from "./App.js";
 import {
   cardScaleStyle,
-  finishedTrick,
   pauseMilliseconds,
   useDisplayProfile,
 } from "./profile.js";
@@ -14,7 +13,7 @@ import { BulletDialog, LayoutDialog } from "./table-layout.js";
 import { SeatTriangle, downloadResults, resultsText } from "./table-score.js";
 import { DealLog, SpeechWord, speechEntries, wordsOnStep } from "./table-speech.js";
 import { Talon } from "./table-talon.js";
-import { CurrentTrick } from "./table-trick.js";
+import { CurrentTrick, finishedTrickDisplay } from "./table-trick.js";
 import type {
   Card,
   GameAction,
@@ -297,16 +296,16 @@ export function GameSnapshotPanel({
   const [bulletOpen, setBulletOpen] = useState(false);
   const [layoutOpen, setLayoutOpen] = useState(false);
   const [seenSnapshot, setSeenSnapshot] = useState(snapshot);
-  const [heldTrick, setHeldTrick] = useState<GameSnapshot["currentTrick"] | null>(null);
+  const [heldTrick, setHeldTrick] = useState<ReturnType<typeof finishedTrickDisplay>>(null);
   const [leadCard, setLeadCard] = useState<Card | null>(null);
   if (snapshot !== seenSnapshot) {
-    const cards = finishedTrick(seenSnapshot.state, snapshot.state);
+    const completed = finishedTrickDisplay(seenSnapshot.state, snapshot.state);
     setSeenSnapshot(snapshot);
     setLeadCard(null);
-    if (profile.trickPause === 0) {
+    if (profile.trickPause === 0 || seenSnapshot.state.dealNumber !== state.dealNumber) {
       setHeldTrick(null);
-    } else if (cards !== null) {
-      setHeldTrick(cards);
+    } else if (completed !== null) {
+      setHeldTrick(completed);
     }
   } else if (profile.trickPause === 0 && heldTrick !== null) {
     setHeldTrick(null);
@@ -390,7 +389,7 @@ export function GameSnapshotPanel({
   const hand = sortHand(state.hand, profile.handOrder, profile.suitOrder);
   const tableTrick =
     heldTrick !== null
-      ? heldTrick
+      ? heldTrick.cards
       : leadCard !== null && state.currentTrick.length === 0
         ? [{ seat, card: leadCard }]
         : state.currentTrick;
@@ -513,7 +512,11 @@ export function GameSnapshotPanel({
       ) : null}
 
       <div className={state.phase === "play" ? "table-play" : undefined}>
-        <Talon state={state} sharedTalon={sharedTalon} onAction={onAction} />
+        <Talon
+          state={heldTrick === null ? state : { ...state, prikup: heldTrick.prikup }}
+          sharedTalon={sharedTalon}
+          onAction={onAction}
+        />
         <CurrentTrick tableTrick={tableTrick} trump={trump} viewer={seat} />
       </div>
       <aside className="trick-dock" aria-label="Взятки">
