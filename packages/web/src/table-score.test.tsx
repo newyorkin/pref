@@ -16,9 +16,14 @@ import {
   type Seat,
 } from "@pref/engine";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { dealJustFinished } from "./GameTable.js";
-import { BulletDialog, centeredCornerSize, LayoutDialog } from "./table-layout.js";
+import {
+  BULLET_BOX_KEY,
+  BulletDialog,
+  centeredCornerSize,
+  LayoutDialog,
+} from "./table-layout.js";
 import {
   BulletSheet,
   DealSummary,
@@ -465,6 +470,45 @@ describe("bullet dialog size", () => {
     expect(markup).toContain('aria-label="Размер пули"');
     expect(markup).toContain(">Закрыть</button>");
     expect(markup).toContain('viewBox="0 0 640 640"');
+  });
+
+  function renderWithStorage(stored: Record<string, string>): string {
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => stored[key] ?? null,
+      setItem: () => undefined,
+    });
+    return renderToStaticMarkup(
+      <BulletDialog
+        score={score}
+        settlement={null}
+        viewer={0}
+        names={["Анна", "Борис", "Вера"]}
+        bulletTarget={10}
+        deals={[]}
+        onClose={() => undefined}
+      />,
+    );
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  test("opens at the size the player chose last time", () => {
+    expect(BULLET_BOX_KEY).toBe("pref.bulletDialogBox.v2");
+    const markup = renderWithStorage({
+      [BULLET_BOX_KEY]: JSON.stringify({ width: 500, height: 540 }),
+    });
+    expect(markup).toContain(
+      '<div class="bullet-dialog" role="dialog" aria-label="Пуля" style="width:500px;height:540px">',
+    );
+  });
+
+  test("ignores the size saved under the old key", () => {
+    const markup = renderWithStorage({
+      "pref.bulletDialogBox.v1": JSON.stringify({ width: 640, height: 704 }),
+    });
+    expect(markup).toContain('<div class="bullet-dialog" role="dialog" aria-label="Пуля">');
   });
 
   test("grows the centered dialog by twice the pointer's move", () => {
