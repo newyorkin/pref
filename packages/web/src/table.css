@@ -1232,6 +1232,28 @@ section.trick.trick-play {
   margin: 0.1rem auto 0;
 }
 
+/* The dealer mark sits on its own line under the trick count, so it never squeezes the name. */
+.seat-corner > .dealer-mark {
+  display: inline-block;
+  margin-top: 0.1rem;
+  padding: 0 0.3rem;
+  border: 1px solid var(--gold);
+  border-radius: 0.4rem;
+  color: var(--gold);
+  font-size: 0.62rem;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+/* The tip has no room under «вы», so one's own mark goes beside the corner's last line, outside
+   the triangle. That keeps the trick dock from growing up into «Ваш ход». */
+.seat-corner-me > .dealer-mark {
+  position: absolute;
+  bottom: 0.1rem;
+  left: calc(100% + 0.5rem);
+  margin: 0;
+}
+
 .seat-corner-turn {
   color: var(--gold);
 }
