@@ -358,14 +358,17 @@ export function BulletDialog({
   function startResize(event: React.PointerEvent<HTMLDivElement>): void {
     event.preventDefault();
     event.stopPropagation();
-    const press = { x: event.clientX, y: event.clientY, time: event.timeStamp };
-    if (isDoublePress(lastPress.current, press)) {
+    const pressed = cornerPressDown(lastPress.current, {
+      x: event.clientX,
+      y: event.clientY,
+      time: event.timeStamp,
+    });
+    lastPress.current = pressed.last;
+    if (pressed.reset) {
       // The second press only resets: it neither resizes nor saves a size.
-      lastPress.current = null;
       setSize(resetDialogSize(BULLET_BOX_KEY));
       return;
     }
-    lastPress.current = press;
     const dialog = dialogRef.current;
     const area = dialog?.parentElement;
     if (dialog == null || area == null) {
@@ -409,10 +412,7 @@ export function BulletDialog({
       handle.removeEventListener("pointerup", end);
       handle.removeEventListener("pointercancel", end);
       finishResize(BULLET_BOX_KEY, chosen);
-      if (chosen !== null) {
-        // A drag isn't the first half of a double press.
-        lastPress.current = null;
-      }
+      lastPress.current = cornerPressAfterDrag(lastPress.current, chosen);
     };
     handle.addEventListener("pointermove", move);
     handle.addEventListener("pointerup", end);
@@ -482,6 +482,31 @@ export function isDoublePress(previous: CornerPress | null, press: CornerPress):
     elapsed <= DOUBLE_PRESS_TIME &&
     Math.hypot(press.x - previous.x, press.y - previous.y) <= DOUBLE_PRESS_DISTANCE
   );
+}
+
+/**
+ * A press on the resize corner. `reset` is true for the second press of a double press,
+ * which only resets the size; `last` is the press to remember for the next one. After a
+ * double press nothing is remembered, so a third quick press starts a new double press.
+ */
+export function cornerPressDown(
+  previous: CornerPress | null,
+  press: CornerPress,
+): { reset: boolean; last: CornerPress | null } {
+  return isDoublePress(previous, press)
+    ? { reset: true, last: null }
+    : { reset: false, last: press };
+}
+
+/**
+ * The end of a press on the resize corner: the press to remember. A press that resized the
+ * dialog (`chosen` isn't null) isn't the first half of a double press; a tap or a jitter is.
+ */
+export function cornerPressAfterDrag(
+  last: CornerPress | null,
+  chosen: { width: number; height: number } | null,
+): CornerPress | null {
+  return chosen === null ? last : null;
 }
 
 /** How far, in pixels, the pointer must move on the resize corner before it counts as a resize. */

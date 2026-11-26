@@ -22,6 +22,8 @@ import {
   BULLET_BOX_KEY,
   BulletDialog,
   centeredCornerSize,
+  cornerPressAfterDrag,
+  cornerPressDown,
   finishResize,
   isDoublePress,
   LayoutDialog,
@@ -554,6 +556,35 @@ describe("bullet dialog size", () => {
     expect(isDoublePress(first, { x: 711, y: 100, time: 1100 })).toBe(false);
     // Out of order.
     expect(isDoublePress(first, { x: 700, y: 100, time: 900 })).toBe(false);
+  });
+
+  test("the second quick press only resets, and a third starts over", () => {
+    const first = { x: 700, y: 100, time: 1000 };
+    const one = cornerPressDown(null, first);
+    expect(one).toEqual({ reset: false, last: first });
+    const two = cornerPressDown(one.last, { x: 701, y: 101, time: 1150 });
+    expect(two).toEqual({ reset: true, last: null });
+    const third = { x: 700, y: 100, time: 1250 };
+    expect(cornerPressDown(two.last, third)).toEqual({ reset: false, last: third });
+  });
+
+  test("a press that resized isn't the first half of a double press, a tap or a jitter is", () => {
+    const limits = { minWidth: 320, maxWidth: 1000, minHeight: 260, maxHeight: 900 };
+    const origin = { x: 700, y: 100, width: 600, height: 640 };
+    const first = { x: 700, y: 100, time: 1000 };
+    const next = { x: 700, y: 100, time: 1200 };
+
+    // A drag that resized: the next quick press is a first press.
+    const dragged = resizeStep(origin, { x: 750, y: 70 }, limits, null);
+    const afterDrag = cornerPressAfterDrag(cornerPressDown(null, first).last, dragged);
+    expect(afterDrag).toBeNull();
+    expect(cornerPressDown(afterDrag, next).reset).toBe(false);
+
+    // A jitter inside the dead zone: the next quick press is a second press.
+    const jitter = resizeStep(origin, { x: 702, y: 99 }, limits, null);
+    const afterJitter = cornerPressAfterDrag(cornerPressDown(null, first).last, jitter);
+    expect(afterJitter).toEqual(first);
+    expect(cornerPressDown(afterJitter, next).reset).toBe(true);
   });
 
   test("doesn't count a tap or a jitter on the resize corner as a resize", () => {
