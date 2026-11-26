@@ -1877,11 +1877,15 @@ describe("complete game state", () => {
     expect(stranger.accepted).toBe(false);
     expect(stranger.reason).toBe("notYourTurn");
 
-    state = act(state, 0, { type: "propose", tricks: 6 });
-    expect(currentWords(state)).toEqual({ 0: "6 запишем?" });
     expect(gameView(state, 1).shownHands[0]).toBeNull();
     expect(gameView(state, 2).shownHands[0]).toBeNull();
-    expect(gameView(state, 0).shownHands[0]).toBeNull();
+    state = act(state, 0, { type: "propose", tricks: 6 });
+    expect(currentWords(state)).toEqual({ 0: "6 запишем?" });
+    const declarerHand = [card("spades", 14), card("clubs", 9)];
+    expect(gameView(state, 1).shownHands).toEqual([declarerHand, null, null]);
+    expect(gameView(state, 2).shownHands).toEqual([declarerHand, null, null]);
+    expect(gameView(state, 0).shownHands).toEqual([null, null, null]);
+    expect(gameView(state, 0).hand).toEqual(declarerHand);
     expect(gameView(state, 1).allowedActions).toEqual([
       { type: "proposal", answer: "agree" },
       { type: "proposal", answer: "decline" },
@@ -1905,8 +1909,14 @@ describe("complete game state", () => {
     });
     expect(repeat.accepted).toBe(false);
 
+    expect(gameView(state, 2).shownHands[0]).toEqual(declarerHand);
+
     state = act(state, 2, { type: "proposal", answer: "agree" });
     expect(state.phase).toBe("auction");
+    expect(state.declarerShown).toBeUndefined();
+    for (const seat of [0, 1, 2] as const) {
+      expect(gameView(state, seat).shownHands).toEqual([null, null, null]);
+    }
     expect(state.deals?.[0]?.tricks).toEqual([6, 0, 4]);
     expect(state.deals?.[0]?.contract).toBe("6 пик");
     expect(state.score.bullet).toEqual([2, 0, 0]);
@@ -1957,7 +1967,10 @@ describe("complete game state", () => {
     expect(state.phase).toBe("play");
     expect(state.proposal ?? null).toBeNull();
     expect(currentWords(state)).toEqual({ 2: "не согласен" });
-    expect(gameView(state, 1).shownHands[0]).toBeNull();
+    const declarerHand = [card("spades", 14), card("clubs", 9)];
+    expect(gameView(state, 1).shownHands[0]).toEqual(declarerHand);
+    expect(gameView(state, 2).shownHands[0]).toEqual(declarerHand);
+    expect(gameView(state, 0).shownHands[0]).toBeNull();
     expect(gameView(state, 0).speech.map((line) => line.word)).toContain(
       "4 запишем?",
     );
@@ -1976,6 +1989,99 @@ describe("complete game state", () => {
     expect(state.score.whists[2][0]).toBe(16);
     expect(state.score.whists[1][0]).toBe(4);
     expect(state.score.mountain[2]).toBe(0);
+  });
+
+  test("the declarer's cards stay open after a refusal, and a whistler's offer opens nothing", () => {
+    const card = (suit: Suit, rank: Card["rank"]): Card => ({ suit, rank });
+    let state = orderedContract(6);
+    state = act(state, 1, { type: "defense", action: { type: "pass" } });
+    state = act(state, 2, { type: "defense", action: { type: "whist" } });
+
+    state = act(state, 2, { type: "propose", tricks: 4 });
+    expect(currentWords(state)).toEqual({ 2: "отдаём 4?" });
+    for (const seat of [0, 1, 2] as const) {
+      expect(gameView(state, seat).shownHands).toEqual([null, null, null]);
+    }
+    state = act(state, 0, { type: "proposal", answer: "decline" });
+    expect(state.declarerShown).toBeUndefined();
+
+    state = act(state, 0, { type: "propose", tricks: 6 });
+    state = act(state, 1, { type: "proposal", answer: "decline" });
+    expect(state.proposal ?? null).toBeNull();
+    state = act(state, 0, { type: "playCard", card: card("spades", 14) });
+    state = act(state, 2, { type: "defense", action: { type: "light" } });
+    expect(gameView(state, 1).shownHands).toEqual([
+      [card("clubs", 9)],
+      null,
+      [card("spades", 13), card("clubs", 10)],
+    ]);
+    expect(gameView(state, 2).shownHands).toEqual([
+      [card("clubs", 9)],
+      [card("hearts", 7), card("diamonds", 9)],
+      null,
+    ]);
+    expect(gameView(state, 0).shownHands).toEqual([
+      null,
+      [card("hearts", 7), card("diamonds", 9)],
+      [card("spades", 13), card("clubs", 10)],
+    ]);
+  });
+
+  test("a misere declarer's proposal opens his cards to both defenders", () => {
+    const card = (suit: Suit, rank: Card["rank"]): Card => ({ suit, rank });
+    const talon = [card("spades", 7), card("spades", 8)] as const;
+    const declarer = [card("hearts", 9), card("clubs", 9)] as const;
+    const left = [card("diamonds", 8), card("clubs", 10)] as const;
+    const right = [card("clubs", 7), card("diamonds", 7)] as const;
+    let state: GameState = {
+      settings: { ...settings, bulletTarget: 10 },
+      phase: "auction",
+      seed: 1,
+      dealNumber: 0,
+      raspasIndex: 0,
+      score: createBulletScore(),
+      dealtCards: { hands: [declarer, left, right], talon },
+      auction: createAuction(0),
+      auctionResult: null,
+      talon: null,
+      defense: null,
+      play: null,
+    };
+    state = act(state, 0, {
+      type: "auction",
+      action: { type: "bid", bid: { type: "misere" } },
+    });
+    state = act(state, 1, { type: "auction", action: { type: "pass" } });
+    state = act(state, 2, { type: "auction", action: { type: "pass" } });
+    state = act(state, 0, { type: "discard", cards: [...talon] });
+    state = confirmOrder(state);
+    expect(state.phase).toBe("play");
+
+    state = act(state, 1, { type: "propose", tricks: 0 });
+    expect(currentWords(state)).toEqual({ 1: "отдаём 0?" });
+    expect(gameView(state, 0).shownHands).toEqual([null, [...left], [...right]]);
+    expect(gameView(state, 2).shownHands[0]).toBeNull();
+    state = act(state, 0, { type: "proposal", answer: "decline" });
+
+    state = act(state, 0, { type: "propose", tricks: 0 });
+    expect(currentWords(state)).toEqual({ 0: "0 запишем?" });
+    expect(gameView(state, 1).shownHands).toEqual([[...declarer], null, [...right]]);
+    expect(gameView(state, 2).shownHands).toEqual([[...declarer], [...left], null]);
+    expect(gameView(state, 0).shownHands).toEqual([null, [...left], [...right]]);
+
+    state = act(state, 2, { type: "proposal", answer: "decline" });
+    expect(gameView(state, 1).shownHands[0]).toEqual([...declarer]);
+    state = act(state, 0, { type: "playCard", card: card("hearts", 9) });
+    expect(gameView(state, 2).shownHands[0]).toEqual([card("clubs", 9)]);
+
+    state = act(state, 0, { type: "propose", tricks: 0 });
+    state = act(state, 1, { type: "proposal", answer: "agree" });
+    state = act(state, 2, { type: "proposal", answer: "agree" });
+    expect(state.phase).toBe("auction");
+    expect(state.deals?.[0]?.tricks).toEqual([0, 10, 0]);
+    for (const seat of [0, 1, 2] as const) {
+      expect(gameView(state, seat).shownHands).toEqual([null, null, null]);
+    }
   });
 
   test("three passes stay on one step and the log ends with raspas", () => {

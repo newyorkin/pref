@@ -92,6 +92,7 @@ export interface GameState {
   readonly defense: DefenseState | null;
   readonly play: TrickPlayState | null;
   readonly proposal?: Proposal | null;
+  readonly declarerShown?: boolean;
   readonly lastLayout?: DealLayout | null;
   readonly deals?: readonly PlayedDeal[];
   readonly layoutHands?: DealLayout["hands"] | null;
