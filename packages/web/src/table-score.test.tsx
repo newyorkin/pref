@@ -1,18 +1,32 @@
 import { readFileSync } from "node:fs";
 import {
   applyGameAction,
+  createBulletScore,
   createGame,
   deal,
   gameView,
+  scoreDeal,
+  scoreOpenTalon,
+  scoreSince,
+  scoreTalonThrow,
+  type BulletScore,
   type GameAction,
   type GameState,
+  type ScoredDeal,
   type Seat,
 } from "@pref/engine";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, test } from "vitest";
 import { dealJustFinished } from "./GameTable.js";
 import { LayoutDialog } from "./table-layout.js";
-import { DealSummary, dealHeading, unplayedNote, whistNotes } from "./table-score.js";
+import {
+  BulletSheet,
+  DealSummary,
+  chainParts,
+  dealHeading,
+  unplayedNote,
+  whistNotes,
+} from "./table-score.js";
 import type { GameSnapshot, PlayedDeal } from "./table-types.js";
 
 const settings = {
@@ -223,5 +237,183 @@ describe("end-of-deal result", () => {
     expect(markup).toContain("Сдача 1: Распасы");
     expect(markup.indexOf("deal-summary")).toBeLessThan(markup.indexOf("layout-board"));
     expect(markup).toContain("Прикуп");
+  });
+});
+
+/** Scores the deals one by one with the engine, as the server does. */
+function scoreDeals(
+  scored: readonly ScoredDeal[],
+  bulletTarget = 10,
+): { score: BulletScore; deals: PlayedDeal[] } {
+  let score = createBulletScore();
+  const deals: PlayedDeal[] = [];
+  for (const [index, next] of scored.entries()) {
+    score = scoreDeal(score, next, bulletTarget);
+    deals.push(
+      played({
+        number: index + 1,
+        declarer: next.type === "raspas" ? null : next.declarer,
+        tricks: [...next.tricks],
+        delta: JSON.parse(JSON.stringify(score.last)) as PlayedDeal["delta"],
+      }),
+    );
+  }
+  return { score, deals };
+}
+
+function sheet(
+  score: BulletScore,
+  deals: readonly PlayedDeal[],
+  viewer = 0,
+  bulletTarget = 10,
+): string {
+  return renderToStaticMarkup(
+    <BulletSheet
+      score={JSON.parse(JSON.stringify(score)) as GameSnapshot["score"]}
+      settlement={null}
+      viewer={viewer}
+      names={names}
+      bulletTarget={bulletTarget}
+      deals={deals}
+    />,
+  );
+}
+
+/**
+ * Every bullet, mountain and whist entry of the sheet in drawing order: the left player's
+ * mountain, bullet, whists on the right player and on the viewer, then the same for the
+ * right player and for the viewer. The highlighted part is in brackets.
+ */
+function entries(markup: string): string[] {
+  return [...markup.matchAll(/<text[^>]*class="pulka-figure[^"]*"[^>]*>(.*?)<\/text>/g)].map(
+    (match) =>
+      (match[1] ?? "")
+        .replace('<tspan class="pulka-fresh">', "[")
+        .replace("</tspan>", "]")
+        .replaceAll("&gt;", ">"),
+  );
+}
+
+describe("last deal's entries on the bullet sheet", () => {
+  test("highlights nothing before the first deal or when the last record is empty", () => {
+    expect(sheet(createBulletScore(), [])).not.toContain("pulka-fresh");
+    const { score, deals } = scoreDeals([
+      { type: "contract", declarer: 1, level: 6, tricks: [2, 6, 2], whistlers: [] },
+    ]);
+    const quiet = { ...score, last: createBulletScore().last };
+    expect(entries(sheet(quiet, deals))).toEqual(["2"]);
+  });
+
+  test("moves the highlight to each new deal's entries for every player it touched", () => {
+    const steps: ScoredDeal[] = [
+      // Подсад: the declarer goes into the гора, both defenders write висты.
+      { type: "contract", declarer: 0, level: 6, tricks: [4, 5, 1], whistlers: [1] },
+      // The lone whistler's ответственность: he is short of his 2 tricks on a семерная.
+      { type: "contract", declarer: 1, level: 7, tricks: [0, 9, 1], whistlers: [2], passer: 0 },
+      // Полвиста on a шестерная.
+      { type: "contract", declarer: 2, level: 6, tricks: [0, 0, 0], whistlers: [], halfWhist: 1 },
+      // Распасы: two players go into the гора, the one without tricks writes into the пуля.
+      { type: "raspas", tricks: [0, 4, 6], multiplier: 1 },
+      // A десятерная closes the viewer's пуля; the overflow helps the left player.
+      { type: "contract", declarer: 0, level: 10, tricks: [10, 0, 0], whistlers: [] },
+    ];
+    const expected = [
+      ["[16]", "[4]", "[4]"],
+      ["[4]", "16", "[4]", "[4]", "4", "4"],
+      ["4", "[4]", "16", "4", "[2]", "4", "4", "4"],
+      ["[4]", "4", "4", "16", "4.[10]", "2", "4", "4", "4", "[1]"],
+      ["4", "4.[5]", "4", "16", "4.10", "2", "4", "4", "4", "1. [10 >>]", "[10]"],
+    ];
+    for (const [index, wanted] of expected.entries()) {
+      const { score, deals } = scoreDeals(steps.slice(0, index + 1));
+      expect(entries(sheet(score, deals))).toEqual(wanted);
+    }
+  });
+
+  test("highlights help written off the гора when the other пули are full", () => {
+    const noWhist = (declarer: Seat, level: 6 | 10 = 6): ScoredDeal => ({
+      type: "contract",
+      declarer,
+      level,
+      tricks: [0, 0, 0],
+      whistlers: [],
+    });
+    const steps: ScoredDeal[] = [
+      { type: "misere", declarer: 0, tricks: [1, 4, 5] },
+      noWhist(1),
+      noWhist(1),
+      noWhist(2),
+      noWhist(2),
+      noWhist(0),
+      noWhist(0),
+      // All three пули are full: the viewer's own гора goes down.
+      noWhist(0),
+      // More than the гора holds: it goes to 0 and the others get the overflow in their гора, as the engine scores it.
+      noWhist(0, 10),
+    ];
+    const at = (count: number) => {
+      const { score, deals } = scoreDeals(steps.slice(0, count), 4);
+      return entries(sheet(score, deals, 0, 4));
+    };
+    expect(at(8)).toEqual(["2. 4 >>", "2. 4 >>", "10.[8]", "2. 4 >>"]);
+    expect(at(9)).toEqual(["[10]", "2. 4 >>", "[10]", "2. 4 >>", "10.8.[0]", "2. 4 >>"]);
+  });
+
+  test("highlights the прикуп's entries as soon as the next deal writes them", () => {
+    const { score, deals } = scoreDeals([
+      { type: "contract", declarer: 1, level: 6, tricks: [0, 0, 0], whistlers: [] },
+    ]);
+    expect(entries(sheet(score, deals))).toEqual(["[2]"]);
+    // Aces in the прикуп of the next deal go into the dealer's пуля right away.
+    const aces = scoreSince(score, scoreOpenTalon(score, 2, [{ rank: 14 }, { rank: 7 }], 10));
+    expect(entries(sheet(aces, deals))).toEqual(["2", "[1]"]);
+    // «Прикуп в лицо» writes two into the dealer's гора.
+    const thrown = scoreSince(score, scoreTalonThrow(score, 2));
+    expect(entries(sheet(thrown, deals))).toEqual(["2", "[2]"]);
+  });
+
+  test("highlights the same entries from every seat's view", () => {
+    const { score, deals } = scoreDeals([
+      { type: "contract", declarer: 0, level: 6, tricks: [4, 5, 1], whistlers: [1] },
+    ]);
+    // Seat 1 sees seat 2 on the left and seat 0 on the right.
+    expect(entries(sheet(score, deals, 1))).toEqual(["[4]", "[4]", "[16]"]);
+    expect(entries(sheet(score, deals, 2))).toEqual(["[4]", "[16]", "[4]"]);
+  });
+
+  test("highlights only the newest number at the end of a long chain", () => {
+    const steps: ScoredDeal[] = Array.from({ length: 15 }, () => ({
+      type: "raspas",
+      tricks: [0, 4, 6],
+      multiplier: 1,
+    }));
+    const { score, deals } = scoreDeals(steps, 100);
+    const markup = sheet(score, deals, 0, 100);
+    const chain = Array.from({ length: 14 }, (_, index) => (index + 1) * 6).join(".");
+    expect(entries(markup)).toContain(`${chain}.[90]`);
+    // The chain still shrinks to fit its field, counting the highlighted number.
+    const at = markup.indexOf(`${chain}.<tspan`);
+    const element = markup.slice(markup.lastIndexOf("<text", at), at);
+    expect(Number(element.match(/font-size="([0-9.]+)"/)?.[1])).toBeLessThan(16);
+  });
+
+  test("splits a chain into the earlier entries and the last deal's entry", () => {
+    const steps = [{ mountain: 2 }, { mountain: 0 }, { mountain: 4 }];
+    const deals = steps.map(({ mountain }) =>
+      played({ delta: { bullet: zeros(), mountain: [mountain, 0, 0], whists: [zeros(), zeros(), zeros()] } }),
+    );
+    const read = (delta: PlayedDeal["delta"]) => delta.mountain[0];
+    expect(chainParts(deals, read, 6, false, true)).toEqual({ main: "2.", fresh: "6" });
+    expect(chainParts(deals, read, 6, false, false)).toEqual({ main: "2.6", fresh: "" });
+    expect(chainParts([], read, 0, false, false)).toEqual({ main: "", fresh: "" });
+    expect(chainParts(deals.slice(0, 1), read, 2, true, true)).toEqual({
+      main: "",
+      fresh: "2 >>",
+    });
+  });
+
+  test("writes the highlighted entries in their own color", () => {
+    const css = readFileSync(new URL("./table.css", import.meta.url), "utf8");
+    expect(css).toMatch(/\.pulka-fresh \{\s*fill: #1f5fbf;/);
   });
 });

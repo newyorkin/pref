@@ -1127,7 +1127,8 @@ describe("table form", () => {
         ]}
       />,
     );
-    expect(continued).toContain(">4.6<");
+    // The 6 is the entry the last deal wrote, so it's in the highlight color.
+    expect(continued).toContain('>4.<tspan class="pulka-fresh">6</tspan><');
   });
 
   test("the score during a game is the final settlement of the current pools", () => {
