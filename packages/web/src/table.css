@@ -904,6 +904,35 @@ span.prikup-back {
   flex: 0 0 auto;
 }
 
+.deal-summary {
+  flex: 0 0 auto;
+  margin-bottom: 0.85rem;
+}
+
+.deal-summary h2 {
+  margin: 0 0 0.45rem;
+  font-family: "Iowan Old Style", Palatino, Georgia, serif;
+  font-size: 1.25rem;
+}
+
+.deal-summary table {
+  border-collapse: collapse;
+  font: 0.92rem/1.3 "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+}
+
+.deal-summary th,
+.deal-summary td {
+  padding: 0.25rem 0.9rem 0.25rem 0;
+  border-bottom: 1px solid rgba(196, 165, 116, 0.45);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.deal-summary thead th {
+  color: var(--muted);
+  font-weight: 600;
+}
+
 .layout-view {
   flex: 1 1 auto;
   min-height: 0;

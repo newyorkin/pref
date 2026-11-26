@@ -3,7 +3,7 @@ import { useDisplayProfile } from "./profile.js";
 import { isRecord } from "./table-utils.js";
 
 import { PlayingCard } from "./table-cards.js";
-import { BulletSheet } from "./table-score.js";
+import { BulletSheet, DealSummary } from "./table-score.js";
 import type { GameSnapshot, PlayedDeal } from "./table-types.js";
 import { clampBox, playerName, sortHand, trickCount } from "./table-utils.js";
 
@@ -122,11 +122,13 @@ export function fitLayoutScale(
 
 export function LayoutDialog({
   layout,
+  deal = null,
   viewer,
   names,
   onClose,
 }: {
   layout: NonNullable<GameSnapshot["lastLayout"]>;
+  deal?: PlayedDeal | null;
   viewer: number;
   names: readonly (string | null)[] | null;
   onClose: () => void;
@@ -155,13 +157,17 @@ export function LayoutDialog({
       return;
     }
     const rect = dialog.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) {
+      // A hidden table (another seat on the test table) can't be measured yet.
+      return;
+    }
     const saved = readDialogSize(LAYOUT_BOX_KEY);
     const width = Math.min(
-      saved?.width ?? rect.width,
+      Math.max(LAYOUT_MIN_WIDTH, saved?.width ?? rect.width),
       window.innerWidth - LAYOUT_SCREEN_GAP * 2,
     );
     const height = Math.min(
-      saved?.height ?? rect.height,
+      Math.max(LAYOUT_MIN_HEIGHT, saved?.height ?? rect.height),
       window.innerHeight - LAYOUT_SCREEN_GAP * 2,
     );
     setBox({
@@ -170,7 +176,7 @@ export function LayoutDialog({
       left: Math.max(LAYOUT_SCREEN_GAP, (window.innerWidth - width) / 2),
       bottom: Math.max(LAYOUT_SCREEN_GAP, (window.innerHeight - height) / 2),
     });
-  }, [box]);
+  });
 
   useEffect(() => {
     if (box === null || typeof localStorage === "undefined") {
@@ -263,7 +269,7 @@ export function LayoutDialog({
         ref={dialogRef}
         className="layout-dialog"
         role="dialog"
-        aria-label="Расклад"
+        aria-label="Итог сдачи"
         style={
           box === null
             ? undefined
@@ -283,12 +289,15 @@ export function LayoutDialog({
         <div
           className="deal-log-resize deal-log-resize-xy"
           role="separator"
-          aria-label="Размер расклада"
+          aria-label="Размер итога сдачи"
           onPointerDown={startResize}
         />
         <button type="button" className="bullet-close" onClick={onClose}>
           Закрыть
         </button>
+        {deal === null ? null : (
+          <DealSummary deal={deal} viewer={viewer} names={names} />
+        )}
         <div className="layout-view" ref={viewRef}>
           <div
             className="layout-scale"

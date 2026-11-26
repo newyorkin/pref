@@ -1348,8 +1348,8 @@ describe("table form", () => {
     expect(choice).not.toContain("Лечь или играть");
     expect(choice).toContain(">Всветлую</button>");
     expect(choice).toContain(">Втёмную</button>");
-    expect(choice).toContain(">Расклад</button>");
-    expect(choice).not.toMatch(/disabled=""[^>]*>Расклад/);
+    expect(choice).toContain(">Итог сдачи</button>");
+    expect(choice).not.toMatch(/disabled=""[^>]*>Итог сдачи/);
 
     const playing = panel({
       ...base,
@@ -1364,7 +1364,7 @@ describe("table form", () => {
         },
       ],
     });
-    expect(playing).toMatch(/<button[^>]*disabled=""[^>]*>Расклад<\/button>/);
+    expect(playing).toMatch(/<button[^>]*disabled=""[^>]*>Итог сдачи<\/button>/);
 
     const finished = panel({
       ...base,
@@ -1380,7 +1380,7 @@ describe("table form", () => {
         },
       ],
     });
-    expect(finished).not.toMatch(/disabled=""[^>]*>Расклад/);
+    expect(finished).not.toMatch(/disabled=""[^>]*>Итог сдачи/);
 
     const sheet = renderToStaticMarkup(
       <LayoutSheet
@@ -1411,8 +1411,9 @@ describe("table form", () => {
         }}
       />,
     );
-    expect(dialog).toContain('aria-label="Расклад"');
-    expect(dialog).toContain('aria-label="Размер расклада"');
+    expect(dialog).toContain('aria-label="Итог сдачи"');
+    expect(dialog).toContain('aria-label="Размер итога сдачи"');
+    expect(dialog).not.toContain("deal-summary");
     expect(dialog).toContain("deal-log-resize deal-log-resize-xy");
     expect(dialog).toContain(">Закрыть</button>");
 

@@ -2005,3 +2005,68 @@ function currentWords(state: GameState): Record<number, string> {
   }
   return words;
 }
+
+describe("deal result for the end-of-deal screen", () => {
+  function playDeal(
+    first: GameState,
+    choose: (actions: readonly GameAction[]) => GameAction | undefined,
+  ): { before: GameState; after: GameState } {
+    let state = first;
+    for (let step = 0; step < 200; step++) {
+      const seat = ([0, 1, 2] as const).find(
+        (place) => gameView(state, place).allowedActions.length > 0,
+      );
+      if (seat === undefined) {
+        throw new Error("no seat can act");
+      }
+      const actions = gameView(state, seat).allowedActions;
+      const action =
+        actions.find((item) => item.type === "playCard") ??
+        choose(actions) ??
+        actions[0]!;
+      const next = act(state, seat, action);
+      if (next.dealNumber !== state.dealNumber || next.phase === "finished") {
+        return { before: state, after: next };
+      }
+      state = next;
+    }
+    throw new Error("deal did not finish");
+  }
+
+  const bid = (wanted: "contract" | "misere") => (actions: readonly GameAction[]) =>
+    actions.find(
+      (action) =>
+        action.type === "auction" &&
+        action.action.type === "bid" &&
+        action.action.bid.type === wanted &&
+        (wanted === "misere" ||
+          (action.action.bid.type === "contract" &&
+            action.action.bid.level === 6 &&
+            action.action.bid.trump === "spades")),
+    ) ?? actions.find((action) => action.type === "auction");
+
+  test.each([
+    ["Распасы", () => undefined],
+    ["Мизер", bid("misere")],
+    ["6 пик", bid("contract")],
+  ] as const)("%s: the layout and the score delta appear only after the last card", (contract, choose) => {
+    const game = createGame({ ...settings, bulletTarget: 10 }, 7);
+    const { before, after } = playDeal(game, choose);
+
+    for (const seat of [0, 1, 2] as const) {
+      expect(gameView(before, seat).lastLayout).toBeNull();
+      expect(gameView(before, seat).deals).toEqual([]);
+    }
+    expect(after.dealNumber).toBe(1);
+    const deal = after.deals?.at(-1);
+    expect(deal?.number).toBe(1);
+    expect(deal?.contract.startsWith(contract)).toBe(true);
+    expect(deal?.delta).toEqual(after.score.last);
+    for (const seat of [0, 1, 2] as const) {
+      const layout = gameView(after, seat).lastLayout;
+      expect(layout?.talon).toEqual(game.dealtCards.talon);
+      expect(layout?.tricks).toEqual(deal?.tricks);
+      expect(gameView(after, seat).deals.at(-1)).toEqual(deal);
+    }
+  });
+});

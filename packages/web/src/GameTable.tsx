@@ -273,6 +273,13 @@ export function GameTable({
   );
 }
 
+/** Whether this snapshot is the first one after a deal was scored. */
+export function dealJustFinished(previous: GameSnapshot, next: GameSnapshot): boolean {
+  return (
+    next.lastLayout != null && (next.deals?.length ?? 0) > (previous.deals?.length ?? 0)
+  );
+}
+
 export function GameSnapshotPanel({
   snapshot,
   settings,
@@ -302,6 +309,9 @@ export function GameSnapshotPanel({
     const completed = finishedTrickDisplay(seenSnapshot.state, snapshot.state);
     setSeenSnapshot(snapshot);
     setLeadCard(null);
+    if (dealJustFinished(seenSnapshot.state, state)) {
+      setLayoutOpen(true);
+    }
     if (profile.trickPause === 0 || seenSnapshot.state.dealNumber !== state.dealNumber) {
       setHeldTrick(null);
     } else if (completed !== null) {
@@ -625,7 +635,7 @@ export function GameSnapshotPanel({
             disabled={layoutLocked}
             onClick={() => setLayoutOpen(true)}
           >
-            Расклад
+            Итог сдачи
           </button>
         )}
       </div>
@@ -645,6 +655,7 @@ export function GameSnapshotPanel({
       {layoutOpen && !layoutLocked && state.lastLayout != null ? (
         <LayoutDialog
           layout={state.lastLayout}
+          deal={state.deals?.at(-1) ?? null}
           viewer={seat}
           names={playerNames}
           onClose={() => setLayoutOpen(false)}

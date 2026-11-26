@@ -677,3 +677,74 @@ export function signed(value: number): string {
   }
   return "0";
 }
+
+export function dealHeading(
+  deal: PlayedDeal,
+  viewer: number,
+  names: readonly (string | null)[] | null,
+): string {
+  const declarer =
+    deal.declarer === null ? null : playerName(deal.declarer, viewer, names);
+  return declarer === null
+    ? `Сдача ${deal.number}: ${deal.contract}`
+    : `Сдача ${deal.number}: ${declarer} — ${deal.contract}`;
+}
+
+export function whistNotes(
+  deal: PlayedDeal,
+  seat: number,
+  viewer: number,
+  names: readonly (string | null)[] | null,
+): string[] {
+  return [0, 1, 2].flatMap((other) => {
+    const value = deal.delta.whists[seat]?.[other] ?? 0;
+    if (other === seat || value === 0) {
+      return [];
+    }
+    const target = other === viewer ? "вас" : playerName(other, viewer, names);
+    return [`${signed(value)} на ${target}`];
+  });
+}
+
+export function DealSummary({
+  deal,
+  viewer,
+  names,
+}: {
+  deal: PlayedDeal;
+  viewer: number;
+  names: readonly (string | null)[] | null;
+}): React.JSX.Element {
+  const played = deal.tricks[0] + deal.tricks[1] + deal.tricks[2] > 0;
+  const entry = (value: number) => (value === 0 ? "—" : signed(value));
+  return (
+    <section className="deal-summary" aria-label="Запись за сдачу">
+      <h2>{dealHeading(deal, viewer, names)}</h2>
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Игрок</th>
+            {played ? <th scope="col">Взятки</th> : null}
+            <th scope="col">Пуля</th>
+            <th scope="col">Гора</th>
+            <th scope="col">Висты</th>
+          </tr>
+        </thead>
+        <tbody>
+          {[0, 1, 2].map((seat) => {
+            const whists = whistNotes(deal, seat, viewer, names);
+            return (
+              <tr key={seat}>
+                <th scope="row">{playerName(seat, viewer, names)}</th>
+                {played ? <td>{deal.tricks[seat] ?? 0}</td> : null}
+                <td>{entry(deal.delta.bullet[seat] ?? 0)}</td>
+                <td>{entry(deal.delta.mountain[seat] ?? 0)}</td>
+                <td>{whists.length === 0 ? "—" : whists.join(", ")}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </section>
+  );
+}
