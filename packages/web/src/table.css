@@ -1223,6 +1223,11 @@ section.trick.trick-play {
   bottom: -0.9rem;
 }
 
+/* «Ваш ход» moves up with the triangle, so it doesn't cover the right corner's name. */
+.game-own-contract .turn-indicator {
+  bottom: calc(var(--table-foot) + 1.55rem);
+}
+
 .seat-corner > span > .contract-badge {
   margin-left: 0.4rem;
 }

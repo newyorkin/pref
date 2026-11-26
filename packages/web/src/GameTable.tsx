@@ -418,6 +418,7 @@ export function GameSnapshotPanel({
       className={[
         showAuction || showOrder ? "game-screen game-screen-auction" : "game-screen",
         (state.discarded ?? []).length > 0 ? "game-has-discard" : "",
+        contract?.declarer === seat ? "game-own-contract" : "",
       ]
         .filter((name) => name !== "")
         .join(" ")}

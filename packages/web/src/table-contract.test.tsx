@@ -179,6 +179,8 @@ describe.each([
       );
     expect(ownLine).toBe(viewer === declarer);
     expect(markup.includes("seat-triangle seat-triangle-own-contract")).toBe(viewer === declarer);
+    // «Ваш ход» moves up with the triangle so that it doesn't cover the right corner.
+    expect(/<main class="[^"]*\bgame-own-contract\b/.test(markup)).toBe(viewer === declarer);
     if (viewer !== declarer) {
       expect(named(names[declarer])).toBe(true);
     }
