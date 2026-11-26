@@ -67,12 +67,18 @@ export function SeatTriangle({
               {playerName(corner.seat, viewer, names)}
             </span>
             {contract?.declarer === corner.seat && corner.place !== "me" ? (
-              <ContractBadge bid={contract.bid} />
+              <>
+                {" "}
+                <ContractBadge bid={contract.bid} />
+              </>
             ) : null}
           </span>
           <strong>{tricks[corner.seat] ?? 0}</strong>
           {ownContract && corner.place === "me" && contract !== null ? (
-            <ContractBadge bid={contract.bid} />
+            <>
+              {" "}
+              <ContractBadge bid={contract.bid} />
+            </>
           ) : null}
         </p>
       ))}

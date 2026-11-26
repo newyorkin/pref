@@ -107,7 +107,8 @@ body:has(.game-screen) {
 .contract-badge {
   display: inline-block;
   flex-shrink: 0;
-  margin-left: 0.4rem;
+  /* With the space before it in the text; a flex corner drops that space. */
+  margin-left: 0.15rem;
   padding: 0 0.4rem;
   border-radius: 0.4rem;
   background: var(--paper);
@@ -1220,6 +1221,10 @@ section.trick.trick-play {
 
 .seat-triangle-own-contract .seat-corner-me {
   bottom: -0.9rem;
+}
+
+.seat-corner > span > .contract-badge {
+  margin-left: 0.4rem;
 }
 
 .seat-corner-me > .contract-badge {

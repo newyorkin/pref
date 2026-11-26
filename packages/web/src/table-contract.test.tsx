@@ -166,14 +166,15 @@ describe.each([
   });
 
   test.each(seats)("seat %i sees the заказ next to the declarer's name", (viewer) => {
-    const markup = render(played, viewer);
+    // Without React's text separators, so that the text between a name and its badge shows.
+    const markup = render(played, viewer).replaceAll("<!-- -->", "");
     // The opponent's name and the trick triangle for an opponent; only the triangle for oneself.
     expect(badges(markup)).toEqual(viewer === declarer ? [badge] : [badge, badge]);
     const named = (who: string) =>
-      new RegExp(`>${who}(?:</span>)?<span class="contract-badge"`).test(markup);
+      new RegExp(`>${who}(?:</span>)? <span class="contract-badge"`).test(markup);
     // One's own заказ has its own line under «вы» and the trick count, below the triangle's tip.
     const ownLine =
-      /seat-corner-me[^"]*"><span><span class="seat-corner-name">вы<\/span><\/span><strong>\d+<\/strong><span class="contract-badge"/.test(
+      /seat-corner-me[^"]*"><span><span class="seat-corner-name">вы<\/span><\/span><strong>\d+<\/strong> <span class="contract-badge"/.test(
         markup,
       );
     expect(ownLine).toBe(viewer === declarer);

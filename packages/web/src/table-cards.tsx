@@ -105,7 +105,12 @@ export function Opponent({
       )}
       <p className="opponent-name">
         {name ?? (empty ? "свободно" : `Место ${place + 1}`)}
-        {contract === null ? null : <ContractBadge bid={contract} />}
+        {contract === null ? null : (
+          <>
+            {" "}
+            <ContractBadge bid={contract} />
+          </>
+        )}
         {isTurn ? (
           <span className="opponent-turn" role="status">
             Ходит
