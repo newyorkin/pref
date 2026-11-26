@@ -77,6 +77,7 @@ describe("bullet scoring", () => {
     expect(both.whists[1][0]).toBe(2);
     expect(both.whists[2][0]).toBe(6);
     expect(both.bullet).toEqual([2, 0, 0]);
+    expect(both.mountain).toEqual([0, 0, 0]);
   });
 
   test("a declarer's undertricks add consolation on top of the whists", () => {
@@ -201,7 +202,51 @@ describe("bullet scoring", () => {
     expect(both.bullet).toEqual([4, 0, 0]);
     expect(both.whists[1][0]).toBe(4);
     expect(both.whists[2][0]).toBe(0);
-    expect(both.mountain).toEqual([0, 0, 4]);
+    expect(both.mountain).toEqual([0, 4, 4]);
+  });
+
+  test("two whistlers share the quota, so four and one on a six writes no mountain", () => {
+    for (const tricks of [
+      [5, 4, 1],
+      [5, 1, 4],
+    ] as const) {
+      const score = scoreDeal(createBulletScore(), {
+        type: "contract",
+        declarer: 0,
+        level: 6,
+        tricks,
+        whistlers: [1, 2],
+      });
+      const oneTrick = tricks[1] === 1 ? 1 : 2;
+      const fourTricks = oneTrick === 1 ? 2 : 1;
+      expect(score.bullet).toEqual([0, 0, 0]);
+      expect(score.mountain).toEqual([2, 0, 0]);
+      expect(score.whists[fourTricks][0]).toBe(10);
+      expect(score.whists[oneTrick][0]).toBe(4);
+    }
+
+    const covered = scoreDeal(createBulletScore(), {
+      type: "contract",
+      declarer: 0,
+      level: 6,
+      tricks: [6, 4, 0],
+      whistlers: [1, 2],
+    });
+    expect(covered.bullet).toEqual([2, 0, 0]);
+    expect(covered.mountain).toEqual([0, 0, 0]);
+    expect(covered.whists[1][0]).toBe(8);
+    expect(covered.whists[2][0]).toBe(0);
+
+    const seven = scoreDeal(createBulletScore(), {
+      type: "contract",
+      declarer: 0,
+      level: 7,
+      tricks: [7, 2, 0],
+      whistlers: [1, 2],
+    });
+    expect(seven.mountain).toEqual([0, 0, 0]);
+    expect(seven.whists[1][0]).toBe(8);
+    expect(seven.whists[2][0]).toBe(0);
   });
 
   test("a taken six writes its price, and one whistler is scored for both defenders", () => {
@@ -335,7 +380,7 @@ describe("bullet scoring", () => {
     expect(missed.whists).toEqual(createBulletScore().whists);
   });
 
-  test("surplus tricks stay out of the bullet and each whistler owes two on a six", () => {
+  test("a pair short of four on a six both write the miss, not a personal share", () => {
     const score = scoreDeal(createBulletScore(), {
       type: "contract",
       declarer: 0,
@@ -346,10 +391,8 @@ describe("bullet scoring", () => {
 
     expect(score.bullet).toEqual([2, 0, 0]);
     expect(score.whists[1][0]).toBe(2);
-    expect(score.mountain[1]).toBe(2);
     expect(score.whists[2][0]).toBe(0);
-    expect(score.mountain[2]).toBe(4);
-    expect(score.mountain[0]).toBe(0);
+    expect(score.mountain).toEqual([0, 6, 6]);
   });
 
   test("both passes take an eight without whists or mountain", () => {

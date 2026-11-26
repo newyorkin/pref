@@ -148,17 +148,15 @@ export function scoreDeal(
       }
     }
   } else {
-    const pooledBlank =
-      (deal.level === 8 || deal.level === 9) &&
-      deal.whistlers.reduce<number>((sum, seat) => sum + deal.tricks[seat], 0) === 0;
+    // Two whistlers share one quota (4, 2 or 1). Tricks of one cover the other.
+    // Only a shortfall of the sum is mountain, and both whistlers write it.
+    const defenseTricks = deal.whistlers.reduce<number>(
+      (sum, seat) => sum + deal.tricks[seat],
+      0,
+    );
+    const short = Math.max(0, requiredWhistTricks(deal.level) - defenseTricks);
     for (const whistler of deal.whistlers) {
       next.whists[whistler][deal.declarer] += deal.tricks[whistler] * price;
-      const short = pooledBlank
-        ? 1
-        : Math.max(
-            0,
-            whistShare(deal.level, whistler, deal.whistlers) - deal.tricks[whistler],
-          );
       if (short > 0) {
         next.mountain[whistler] += short * price;
       }
@@ -261,24 +259,6 @@ export function settleBullet(score: BulletScore): [number, number, number] {
     }
   }
   return result;
-}
-
-function whistShare(
-  level: ContractLevel,
-  _whistler: Seat,
-  whistlers: readonly Seat[],
-): number {
-  const total = requiredWhistTricks(level);
-  if (whistlers.length <= 1) {
-    return total;
-  }
-  if (level === 6) {
-    return 2;
-  }
-  if (level === 7) {
-    return 1;
-  }
-  return 0;
 }
 
 function awardBullet(
