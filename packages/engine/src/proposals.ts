@@ -1,6 +1,6 @@
 import { type Seat } from "./auction.js";
 import { closeScoredDeal } from "./deal-result.js";
-import { type Deal } from "./deck.js";
+import { type Card, type Deal } from "./deck.js";
 import { accept, reject } from "./game-state.js";
 import type {
   GameAction,
@@ -98,17 +98,17 @@ export function offerProposal(
   if (!Number.isInteger(tricks) || tricks < floor || tricks > 10) {
     return reject(state, "invalidProposal");
   }
+  const declarer = state.auctionResult.declarer === seat;
   return accept({
     ...state,
     ...withSpeech(
       state,
       seat,
-      state.auctionResult.declarer === seat
-        ? `${tricks} запишем?`
-        : `отдаём ${tricks}?`,
+      declarer ? `${tricks} запишем?` : `отдаём ${tricks}?`,
       true,
     ),
     proposal: { tricks, proposer: seat, answers: [null, null, null] },
+    ...(declarer ? { declarerShown: true } : {}),
   });
 }
 
@@ -205,7 +205,21 @@ export function proposedHands(
   state: GameState,
   viewer: Seat,
 ): GameSeatView["shownHands"] {
-  void state;
-  void viewer;
-  return hands;
+  const result = state.auctionResult;
+  if (
+    state.declarerShown !== true ||
+    state.phase !== "play" ||
+    state.play === null ||
+    (result?.type !== "contract" && result?.type !== "misere") ||
+    result.declarer === viewer
+  ) {
+    return hands;
+  }
+  const shown = [...hands] as [
+    readonly Card[] | null,
+    readonly Card[] | null,
+    readonly Card[] | null,
+  ];
+  shown[result.declarer] = state.play.hands[result.declarer];
+  return shown;
 }

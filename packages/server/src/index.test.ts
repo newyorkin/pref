@@ -1115,6 +1115,84 @@ describe("game server", () => {
     }
   });
 
+  test("a declarer's proposal sends his hand to the other two seats only", async () => {
+    const server = createGameServer();
+    server.addTable("proposal-open", defenseTable(6));
+    await server.listen();
+    const sessions = await Promise.all([
+      registerAndLogin(server.httpUrl(), "proposal-0"),
+      registerAndLogin(server.httpUrl(), "proposal-1"),
+      registerAndLogin(server.httpUrl(), "proposal-2"),
+    ]);
+    const clients: Array<{
+      socket: WebSocket;
+      inbox: MessageInbox;
+      snapshot: SnapshotMessage & { state: GameSeatView };
+    }> = [];
+    let actionNumber = 0;
+
+    try {
+      for (const [seat, session] of sessions.entries()) {
+        const client = await connect(server.url(), session.cookie);
+        client.socket.send(
+          JSON.stringify({
+            type: "join",
+            tableId: "proposal-open",
+            seat,
+          }),
+        );
+        clients.push({
+          ...client,
+          snapshot: asGameSnapshot(await client.inbox.next()),
+        });
+      }
+
+      async function send(seat: 0 | 1 | 2, action: GameAction): Promise<void> {
+        const command: GameActionCommand = {
+          tableId: "proposal-open",
+          seat,
+          actionId: `proposal-${actionNumber++}`,
+          expectedVersion: clients[seat].snapshot.version,
+          type: "gameAction",
+          payload: { action },
+        };
+        clients[seat].socket.send(JSON.stringify(command));
+        const snapshots = await Promise.all(
+          clients.map((client) => client.inbox.next()),
+        );
+        snapshots.forEach((snapshot, index) => {
+          clients[index].snapshot = asGameSnapshot(snapshot);
+        });
+      }
+
+      const declarerHand = [
+        { suit: "spades", rank: 14 },
+        { suit: "clubs", rank: 9 },
+      ];
+      await send(1, { type: "defense", action: { type: "pass" } });
+      await send(2, { type: "defense", action: { type: "whist" } });
+      for (const client of clients) {
+        expect(client.snapshot.state.shownHands).toEqual([null, null, null]);
+      }
+
+      await send(0, { type: "propose", tricks: 6 });
+      expect(clients[1].snapshot.state.shownHands).toEqual([declarerHand, null, null]);
+      expect(clients[2].snapshot.state.shownHands).toEqual([declarerHand, null, null]);
+      expect(clients[0].snapshot.state.shownHands).toEqual([null, null, null]);
+      expect(JSON.stringify(clients[0].snapshot.state)).not.toContain('"hearts"');
+
+      await send(2, { type: "proposal", answer: "decline" });
+      expect(clients[1].snapshot.state.shownHands?.[0]).toEqual(declarerHand);
+      expect(clients[2].snapshot.state.shownHands?.[0]).toEqual(declarerHand);
+      expect(clients[0].snapshot.state.shownHands).toEqual([null, null, null]);
+    } finally {
+      for (const client of clients) {
+        client.socket.terminate();
+      }
+      await server.close();
+    }
+  });
+
   test("serves the client build and the table page from the same port", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "pref-static-"));
     await writeFile(
