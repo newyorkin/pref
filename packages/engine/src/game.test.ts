@@ -2064,14 +2064,22 @@ describe("complete game state", () => {
     // The passer refuses the whistler's offer; the whistler plays the passer's open hand.
     state = act(state, 2, { type: "propose", tricks: 4 });
     state = act(state, 1, { type: "proposal", answer: "decline" });
-    expect(wordsFor(state)[0]).toEqual({ 1: "не согласен" });
+    expect(wordsFor(state)).toEqual([
+      { 1: "не согласен" },
+      { 1: "не согласен" },
+      { 1: "не согласен" },
+    ]);
     state = act(state, 2, { type: "playCard", card: card("hearts", 7) });
     expect(wordsFor(state)).toEqual([{}, {}, {}]);
 
     // The declarer refuses, and a new offer shows only its own words.
     state = act(state, 2, { type: "propose", tricks: 4 });
     state = act(state, 0, { type: "proposal", answer: "decline" });
-    expect(wordsFor(state)[1]).toEqual({ 0: "не согласен" });
+    expect(wordsFor(state)).toEqual([
+      { 0: "не согласен" },
+      { 0: "не согласен" },
+      { 0: "не согласен" },
+    ]);
     state = act(state, 2, { type: "propose", tricks: 4 });
     expect(wordsFor(state)).toEqual([
       { 2: "отдаём 4?" },
