@@ -16,9 +16,21 @@ import {
   type Seat,
 } from "@pref/engine";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { dealJustFinished } from "./GameTable.js";
-import { LayoutDialog } from "./table-layout.js";
+import {
+  BULLET_BOX_KEY,
+  BulletDialog,
+  centeredCornerSize,
+  cornerPressAfterDrag,
+  cornerPressDown,
+  finishResize,
+  isDoublePress,
+  LayoutDialog,
+  movedPastDeadZone,
+  resetDialogSize,
+  resizeStep,
+} from "./table-layout.js";
 import {
   BulletSheet,
   DealSummary,
@@ -415,5 +427,214 @@ describe("last deal's entries on the bullet sheet", () => {
   test("writes the highlighted entries in their own color", () => {
     const css = readFileSync(new URL("./table.css", import.meta.url), "utf8");
     expect(css).toMatch(/\.pulka-fresh \{\s*fill: #1f5fbf;/);
+  });
+});
+
+describe("bullet dialog size", () => {
+  const css = readFileSync(new URL("./table.css", import.meta.url), "utf8");
+  const score: GameSnapshot["score"] = {
+    bullet: [0, 0, 0],
+    mountain: [0, 0, 0],
+    whists: [
+      [0, 0, 0],
+      [0, 0, 0],
+      [0, 0, 0],
+    ],
+  };
+
+  test("fits the dialog to the room on the screen, not to a fixed size", () => {
+    expect(css).toMatch(/\.bullet-dialog-backdrop \{\s*container-type: size;/);
+    expect(css).toMatch(
+      /\.bullet-dialog \{[^}]*width: min\(100cqw, calc\(100cqh - var\(--bullet-chrome\)\)\);/,
+    );
+    expect(css).toMatch(
+      /\.bullet-dialog \{[^}]*height: min\(100cqh, calc\(100cqw \+ var\(--bullet-chrome\)\)\);/,
+    );
+    // A size the player chose never makes the dialog bigger than the screen.
+    expect(css).toMatch(/\.bullet-dialog \{[^}]*max-width: 100cqw;\s*max-height: 100cqh;/);
+    const dialog = css.match(/\.bullet-dialog \{[^}]*\}/)?.[0] ?? "";
+    expect(dialog).not.toMatch(/40rem|44rem|dvh/);
+  });
+
+  test("lets the пуля take the room left in the dialog", () => {
+    expect(css).toMatch(/\.bullet-dialog \.pulka \{\s*flex: 1 1 0;\s*width: 100%;/);
+    expect(css).toMatch(/\.bullet-dialog \.bullet-result \{\s*flex: 0 0 auto;/);
+  });
+
+  test("keeps the close button and the resize corner, with no fixed size by default", () => {
+    const markup = renderToStaticMarkup(
+      <BulletDialog
+        score={score}
+        settlement={null}
+        viewer={0}
+        names={["Анна", "Борис", "Вера"]}
+        bulletTarget={10}
+        deals={[]}
+        onClose={() => undefined}
+      />,
+    );
+    expect(markup).toContain('<div class="bullet-dialog" role="dialog" aria-label="Пуля">');
+    expect(markup).toContain('aria-label="Размер пули"');
+    expect(markup).toContain(">Закрыть</button>");
+    expect(markup).toContain('viewBox="0 0 640 640"');
+  });
+
+  function renderWithStorage(stored: Record<string, string>): string {
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => stored[key] ?? null,
+      setItem: (key: string, value: string) => {
+        stored[key] = value;
+      },
+      removeItem: (key: string) => {
+        delete stored[key];
+      },
+    });
+    return renderToStaticMarkup(
+      <BulletDialog
+        score={score}
+        settlement={null}
+        viewer={0}
+        names={["Анна", "Борис", "Вера"]}
+        bulletTarget={10}
+        deals={[]}
+        onClose={() => undefined}
+      />,
+    );
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  test("opens at the size the player chose last time", () => {
+    expect(BULLET_BOX_KEY).toBe("pref.bulletDialogBox.v2");
+    const markup = renderWithStorage({
+      [BULLET_BOX_KEY]: JSON.stringify({ width: 500, height: 540 }),
+    });
+    expect(markup).toContain(
+      '<div class="bullet-dialog" role="dialog" aria-label="Пуля" style="width:500px;height:540px">',
+    );
+  });
+
+  test("ignores the size saved under the old key", () => {
+    const markup = renderWithStorage({
+      "pref.bulletDialogBox.v1": JSON.stringify({ width: 640, height: 704 }),
+    });
+    expect(markup).toContain('<div class="bullet-dialog" role="dialog" aria-label="Пуля">');
+  });
+
+  test("a double press on the resize corner goes back to the size by the screen", () => {
+    const stored = { [BULLET_BOX_KEY]: JSON.stringify({ width: 500, height: 540 }) };
+    expect(renderWithStorage(stored)).toContain('title="Двойное нажатие — размер по экрану"');
+    // On a double press, the corner's handler sets the dialog's size to what this returns.
+    expect(resetDialogSize(BULLET_BOX_KEY)).toBeNull();
+    expect(stored).toEqual({});
+    expect(renderWithStorage(stored)).toContain(
+      '<div class="bullet-dialog" role="dialog" aria-label="Пуля">',
+    );
+  });
+
+  test("puts «Закрыть» beside the пуля on a short landscape screen", () => {
+    const landscape =
+      css.match(/@container \(orientation: landscape\) and \(max-height: 32rem\) \{[\s\S]*?\n\}/)?.[0] ??
+      "";
+    expect(landscape).toMatch(/\.bullet-dialog \{[^}]*flex-direction: row-reverse;/);
+    expect(landscape).toMatch(
+      /\.bullet-dialog \{[^}]*height: min\(100cqh, calc\(100cqw - var\(--bullet-chrome\)\)\);/,
+    );
+    expect(landscape).toMatch(/\.bullet-dialog \.bullet-close \{\s*align-self: flex-start;/);
+  });
+
+  test("counts two presses within 300 ms as a double press, for a mouse or a finger", () => {
+    const first = { time: 1000 };
+    expect(isDoublePress(null, first)).toBe(false);
+    expect(isDoublePress(first, { time: 1000 })).toBe(true);
+    expect(isDoublePress(first, { time: 1200 })).toBe(true);
+    expect(isDoublePress(first, { time: 1300 })).toBe(true);
+    // Too slow.
+    expect(isDoublePress(first, { time: 1301 })).toBe(false);
+    // Out of order.
+    expect(isDoublePress(first, { time: 900 })).toBe(false);
+  });
+
+  test("the second quick press only resets, and a third starts over", () => {
+    const first = { time: 1000 };
+    const one = cornerPressDown(null, first);
+    expect(one).toEqual({ reset: false, last: first });
+    const two = cornerPressDown(one.last, { time: 1150 });
+    expect(two).toEqual({ reset: true, last: null });
+    const third = { time: 1250 };
+    expect(cornerPressDown(two.last, third)).toEqual({ reset: false, last: third });
+  });
+
+  test("a press that resized isn't the first half of a double press, a tap or a jitter is", () => {
+    const limits = { minWidth: 320, maxWidth: 1000, minHeight: 260, maxHeight: 900 };
+    const origin = { x: 700, y: 100, width: 600, height: 640 };
+    const first = { time: 1000 };
+    const next = { time: 1200 };
+
+    // A drag that resized: the next quick press is a first press.
+    const dragged = resizeStep(origin, { x: 750, y: 70 }, limits, null);
+    const afterDrag = cornerPressAfterDrag(cornerPressDown(null, first).last, dragged);
+    expect(afterDrag).toBeNull();
+    expect(cornerPressDown(afterDrag, next).reset).toBe(false);
+
+    // A jitter inside the dead zone: the next quick press is a second press.
+    const jitter = resizeStep(origin, { x: 702, y: 99 }, limits, null);
+    const afterJitter = cornerPressAfterDrag(cornerPressDown(null, first).last, jitter);
+    expect(afterJitter).toEqual(first);
+    expect(cornerPressDown(afterJitter, next).reset).toBe(true);
+  });
+
+  test("doesn't count a tap or a jitter on the resize corner as a resize", () => {
+    const origin = { x: 700, y: 100 };
+    expect(movedPastDeadZone(origin, { x: 700, y: 100 })).toBe(false);
+    expect(movedPastDeadZone(origin, { x: 702, y: 98 })).toBe(false);
+    expect(movedPastDeadZone(origin, { x: 704, y: 100 })).toBe(true);
+    expect(movedPastDeadZone(origin, { x: 697, y: 104 })).toBe(true);
+  });
+
+  test("resizes only once the pointer leaves the dead zone, then follows it", () => {
+    const limits = { minWidth: 320, maxWidth: 1000, minHeight: 260, maxHeight: 900 };
+    const origin = { x: 700, y: 100, width: 600, height: 640 };
+    // A jitter: no size yet.
+    expect(resizeStep(origin, { x: 702, y: 99 }, limits, null)).toBeNull();
+    // Out of the dead zone: the size follows the pointer.
+    const first = resizeStep(origin, { x: 750, y: 70 }, limits, null);
+    expect(first).toEqual({ width: 700, height: 700 });
+    // Once resizing, coming back near the start still resizes.
+    expect(resizeStep(origin, { x: 701, y: 100 }, limits, first)).toEqual({
+      width: 602,
+      height: 640,
+    });
+  });
+
+  test("saves the size only when a drag on the corner resized the dialog", () => {
+    const stored: Record<string, string> = {};
+    renderWithStorage(stored);
+    // Opening the dialog saves nothing.
+    expect(stored).toEqual({});
+    // A tap or a jitter ends without a size.
+    finishResize(BULLET_BOX_KEY, null);
+    expect(stored).toEqual({});
+    finishResize(BULLET_BOX_KEY, { width: 500, height: 540 });
+    expect(JSON.parse(stored[BULLET_BOX_KEY] ?? "null")).toEqual({ width: 500, height: 540 });
+  });
+
+  test("grows the centered dialog by twice the pointer's move", () => {
+    const limits = { minWidth: 320, maxWidth: 1000, minHeight: 260, maxHeight: 900 };
+    const origin = { x: 700, y: 100, width: 600, height: 640 };
+    expect(centeredCornerSize(origin, { x: 750, y: 70 }, limits)).toEqual({
+      width: 700,
+      height: 700,
+    });
+    expect(centeredCornerSize(origin, { x: 400, y: 600 }, limits)).toEqual({
+      width: 320,
+      height: 260,
+    });
+    expect(centeredCornerSize(origin, { x: 1200, y: -500 }, limits)).toEqual({
+      width: 1000,
+      height: 900,
+    });
   });
 });

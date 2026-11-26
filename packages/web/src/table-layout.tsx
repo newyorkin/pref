@@ -80,7 +80,12 @@ export const LAYOUT_SCREEN_GAP = 12;
 
 export const LAYOUT_BOX_KEY = "pref.layoutDialogBox.v1";
 
-export const BULLET_BOX_KEY = "pref.bulletDialogBox.v1";
+// v1 saved the default size on every open, not only the size the player chose, so it is not read.
+export const BULLET_BOX_KEY = "pref.bulletDialogBox.v2";
+
+export const BULLET_MIN_WIDTH = 320;
+
+export const BULLET_MIN_HEIGHT = 260;
 
 export function cornerBoxSize(
   origin: { x: number; y: number; width: number; height: number },
@@ -342,70 +347,68 @@ export function BulletDialog({
   onClose: () => void;
 }): React.JSX.Element {
   const dialogRef = useRef<HTMLDivElement>(null);
-  const [box, setBox] = useState<{
-    width: number;
-    height: number;
-    left: number;
-    bottom: number;
-  } | null>(null);
-
-  useLayoutEffect(() => {
-    if (box !== null || dialogRef.current === null) {
-      return;
-    }
-    const rect = dialogRef.current.getBoundingClientRect();
-    const saved = readDialogSize(BULLET_BOX_KEY);
-    const width = Math.min(saved?.width ?? rect.width, window.innerWidth - 24);
-    const height = Math.min(saved?.height ?? rect.height, window.innerHeight - 24);
-    setBox({
-      width,
-      height,
-      left: (window.innerWidth - width) / 2,
-      bottom: (window.innerHeight - height) / 2,
-    });
-  }, [box]);
-
-  useEffect(() => {
-    if (box === null || typeof localStorage === "undefined") {
-      return;
-    }
-    localStorage.setItem(BULLET_BOX_KEY, JSON.stringify(box));
-  }, [box]);
+  // Without a size the player chose, the CSS fits the dialog to the screen. A chosen size is
+  // only a wish: the CSS still caps it at the screen, so a smaller window never cuts the пуля.
+  const [size, setSize] = useState<{ width: number; height: number } | null>(() =>
+    readDialogSize(BULLET_BOX_KEY),
+  );
+  // The last press on the resize corner that didn't resize, for a double press.
+  const lastPress = useRef<CornerPress | null>(null);
 
   function startResize(event: React.PointerEvent<HTMLDivElement>): void {
     event.preventDefault();
     event.stopPropagation();
+    const pressed = cornerPressDown(lastPress.current, { time: event.timeStamp });
+    lastPress.current = pressed.last;
+    if (pressed.reset) {
+      // The second press only resets: it neither resizes nor saves a size.
+      setSize(resetDialogSize(BULLET_BOX_KEY));
+      return;
+    }
     const dialog = dialogRef.current;
-    if (dialog === null) {
+    const area = dialog?.parentElement;
+    if (dialog == null || area == null) {
       return;
     }
     const rect = dialog.getBoundingClientRect();
+    const style = getComputedStyle(area);
+    const room = {
+      width:
+        area.clientWidth -
+        parseFloat(style.paddingLeft) -
+        parseFloat(style.paddingRight),
+      height:
+        area.clientHeight -
+        parseFloat(style.paddingTop) -
+        parseFloat(style.paddingBottom),
+    };
     const origin = {
       x: event.clientX,
       y: event.clientY,
       width: rect.width,
       height: rect.height,
-      left: rect.left,
-      bottom: window.innerHeight - rect.bottom,
+    };
+    const limits = {
+      minWidth: Math.min(BULLET_MIN_WIDTH, room.width),
+      minHeight: Math.min(BULLET_MIN_HEIGHT, room.height),
+      maxWidth: room.width,
+      maxHeight: room.height,
     };
     const handle = event.currentTarget;
+    let chosen: { width: number; height: number } | null = null;
     const move = (ev: PointerEvent): void => {
-      const size = cornerBoxSize(
-        origin,
-        { x: ev.clientX, y: ev.clientY },
-        {
-          minWidth: 320,
-          minHeight: 260,
-          maxWidth: Math.max(320, window.innerWidth - origin.left - 12),
-          maxHeight: Math.max(260, window.innerHeight - origin.bottom - 12),
-        },
-      );
-      setBox({ ...size, left: origin.left, bottom: origin.bottom });
+      const next = resizeStep(origin, { x: ev.clientX, y: ev.clientY }, limits, chosen);
+      if (next !== chosen) {
+        chosen = next;
+        setSize(next);
+      }
     };
     const end = (): void => {
       handle.removeEventListener("pointermove", move);
       handle.removeEventListener("pointerup", end);
       handle.removeEventListener("pointercancel", end);
+      finishResize(BULLET_BOX_KEY, chosen);
+      lastPress.current = cornerPressAfterDrag(lastPress.current, chosen);
     };
     handle.addEventListener("pointermove", move);
     handle.addEventListener("pointerup", end);
@@ -424,26 +427,14 @@ export function BulletDialog({
         className="bullet-dialog"
         role="dialog"
         aria-label="Пуля"
-        style={
-          box === null
-            ? undefined
-            : {
-                position: "fixed",
-                left: box.left,
-                bottom: box.bottom,
-                width: box.width,
-                height: box.height,
-                maxWidth: "none",
-                maxHeight: "none",
-                margin: 0,
-              }
-        }
+        style={size === null ? undefined : { width: size.width, height: size.height }}
         onClick={(event) => event.stopPropagation()}
       >
         <div
           className="deal-log-resize deal-log-resize-xy"
           role="separator"
           aria-label="Размер пули"
+          title="Двойное нажатие — размер по экрану"
           onPointerDown={startResize}
         />
         <button type="button" className="bullet-close" onClick={onClose}>
@@ -462,6 +453,132 @@ export function BulletDialog({
       </div>
     </div>
   );
+}
+
+/** A press on the resize corner: when it happened (the event's timeStamp, in ms). */
+export type CornerPress = { time: number };
+
+/** The longest time, in ms, between the two presses of a double press. */
+export const DOUBLE_PRESS_TIME = 300;
+
+/**
+ * Whether `press` is the second half of a double press on the resize corner. Pointer events
+ * work the same for a mouse, a finger and a pen, unlike dblclick, which phones may not send.
+ * Where the presses land isn't checked: both are on the small corner already, and two finger
+ * taps rarely land on the same spot.
+ */
+export function isDoublePress(previous: CornerPress | null, press: CornerPress): boolean {
+  if (previous === null) {
+    return false;
+  }
+  const elapsed = press.time - previous.time;
+  return (
+    elapsed >= 0 &&
+    elapsed <= DOUBLE_PRESS_TIME
+  );
+}
+
+/**
+ * A press on the resize corner. `reset` is true for the second press of a double press,
+ * which only resets the size; `last` is the press to remember for the next one. After a
+ * double press nothing is remembered, so a third quick press starts a new double press.
+ */
+export function cornerPressDown(
+  previous: CornerPress | null,
+  press: CornerPress,
+): { reset: boolean; last: CornerPress | null } {
+  return isDoublePress(previous, press)
+    ? { reset: true, last: null }
+    : { reset: false, last: press };
+}
+
+/**
+ * The end of a press on the resize corner: the press to remember. A press that resized the
+ * dialog (`chosen` isn't null) isn't the first half of a double press; a tap or a jitter is.
+ */
+export function cornerPressAfterDrag(
+  last: CornerPress | null,
+  chosen: { width: number; height: number } | null,
+): CornerPress | null {
+  return chosen === null ? last : null;
+}
+
+/** How far, in pixels, the pointer must move on the resize corner before it counts as a resize. */
+export const RESIZE_DEAD_ZONE = 4;
+
+export function movedPastDeadZone(
+  origin: { x: number; y: number },
+  point: { x: number; y: number },
+): boolean {
+  return Math.hypot(point.x - origin.x, point.y - origin.y) >= RESIZE_DEAD_ZONE;
+}
+
+/**
+ * The size of a centered box whose top right corner follows the pointer. The box grows
+ * on both sides, so it grows by twice the pointer's move.
+ */
+export function centeredCornerSize(
+  origin: { x: number; y: number; width: number; height: number },
+  point: { x: number; y: number },
+  limits: {
+    minWidth: number;
+    maxWidth: number;
+    minHeight: number;
+    maxHeight: number;
+  },
+): { width: number; height: number } {
+  return cornerBoxSize(
+    origin,
+    {
+      x: origin.x + 2 * (point.x - origin.x),
+      y: origin.y + 2 * (point.y - origin.y),
+    },
+    limits,
+  );
+}
+
+/**
+ * One pointer move on the resize corner: the dialog's new size, or `chosen` unchanged while
+ * the pointer hasn't left the dead zone yet. A tap or a shaky click on the corner isn't a
+ * resize, so it doesn't pin the size. `chosen` is null until the drag resizes the dialog.
+ */
+export function resizeStep(
+  origin: { x: number; y: number; width: number; height: number },
+  point: { x: number; y: number },
+  limits: {
+    minWidth: number;
+    maxWidth: number;
+    minHeight: number;
+    maxHeight: number;
+  },
+  chosen: { width: number; height: number } | null,
+): { width: number; height: number } | null {
+  if (chosen === null && !movedPastDeadZone(origin, point)) {
+    return chosen;
+  }
+  return centeredCornerSize(origin, point, limits);
+}
+
+/** The end of a drag on the resize corner: saves the size only if the drag resized the dialog. */
+export function finishResize(
+  key: string,
+  chosen: { width: number; height: number } | null,
+): void {
+  if (chosen === null || typeof localStorage === "undefined") {
+    return;
+  }
+  localStorage.setItem(key, JSON.stringify(chosen));
+}
+
+/**
+ * A double press on the resize corner: drops the saved size and returns the dialog's new size,
+ * null, so it goes back to the automatic size now and on the next open.
+ */
+export function resetDialogSize(key: string): null {
+  if (typeof localStorage !== "undefined") {
+    localStorage.removeItem(key);
+  }
+  return null;
 }
 
 export function readDialogSize(key: string): { width: number; height: number } | null {
