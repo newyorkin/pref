@@ -764,7 +764,13 @@ export function DealSummary({
                 <td>{entry(deal.delta.bullet[seat] ?? 0)}</td>
                 <td>{entry(deal.delta.mountain[seat] ?? 0)}</td>
                 <td className="deal-summary-whists">
-                  {whists.length === 0 ? "—" : whists.join(", ")}
+                  {whists.length === 0
+                    ? "—"
+                    : whists.map((note, index) => (
+                        <span key={note} className="deal-summary-whist">
+                          {index === 0 ? note : `, ${note}`}
+                        </span>
+                      ))}
                 </td>
               </tr>
             );

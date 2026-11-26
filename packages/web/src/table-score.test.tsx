@@ -106,7 +106,7 @@ describe("end-of-deal result", () => {
       '<th scope="row">Борис</th><td>6</td><td>+2</td><td>—</td><td class="deal-summary-whists">—</td>',
     );
     expect(markup).toContain(
-      '<th scope="row">вы</th><td>2</td><td>—</td><td>—</td><td class="deal-summary-whists">+4 на Борис</td>',
+      '<th scope="row">вы</th><td>2</td><td>—</td><td>—</td><td class="deal-summary-whists"><span class="deal-summary-whist">+4 на Борис</span></td>',
     );
   });
 
@@ -189,7 +189,21 @@ describe("end-of-deal result", () => {
         names={names}
       />,
     );
-    expect(markup).toContain('<td class="deal-summary-whists">+4 на Борис</td>');
+    expect(css).toMatch(/\.deal-summary-whist \{\s*display: inline-block;\s*white-space: nowrap;/);
+    expect(markup).toContain(
+      '<td class="deal-summary-whists"><span class="deal-summary-whist">+4 на Борис</span></td>',
+    );
+    const two = renderToStaticMarkup(
+      <DealSummary
+        deal={played({ delta: { bullet: zeros(), mountain: zeros(), whists: [[0, 4, 2], zeros(), zeros()] } })}
+        viewer={1}
+        names={names}
+      />,
+    );
+    // Lines break between entries, never inside «+4 на вас».
+    expect(two).toContain(
+      '<span class="deal-summary-whist">+4 на вас</span><span class="deal-summary-whist">, +2 на Вера</span>',
+    );
   });
 
   test("the result dialog shows the deal record above the layout", () => {

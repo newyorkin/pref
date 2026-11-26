@@ -2043,7 +2043,11 @@ describe("deal result for the end-of-deal screen", () => {
           (action.action.bid.type === "contract" &&
             action.action.bid.level === 6 &&
             action.action.bid.trump === "spades")),
-    ) ?? actions.find((action) => action.type === "auction");
+    ) ??
+    actions.find(
+      (action) => action.type === "defense" && action.action.type === "whist",
+    ) ??
+    actions.find((action) => action.type === "auction");
 
   test.each([
     ["Распасы", () => undefined],
@@ -2062,6 +2066,8 @@ describe("deal result for the end-of-deal screen", () => {
     expect(deal?.number).toBe(1);
     expect(deal?.contract.startsWith(contract)).toBe(true);
     expect(deal?.delta).toEqual(after.score.last);
+    const tricks = deal?.tricks ?? [0, 0, 0];
+    expect(tricks[0] + tricks[1] + tricks[2]).toBe(10);
     for (const seat of [0, 1, 2] as const) {
       const layout = gameView(after, seat).lastLayout;
       expect(layout?.talon).toEqual(game.dealtCards.talon);
