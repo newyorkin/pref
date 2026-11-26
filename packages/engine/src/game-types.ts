@@ -39,6 +39,7 @@ export type GameAction =
   | { readonly type: "playCard"; readonly card: Card }
   | { readonly type: "propose"; readonly tricks: number }
   | { readonly type: "proposal"; readonly answer: "agree" | "decline" }
+  | { readonly type: "cancelProposal" }
   | { readonly type: "rematch" };
 
 export interface Proposal {

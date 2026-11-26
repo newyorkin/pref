@@ -1890,7 +1890,7 @@ describe("complete game state", () => {
       { type: "proposal", answer: "agree" },
       { type: "proposal", answer: "decline" },
     ]);
-    expect(gameView(state, 0).allowedActions).toEqual([]);
+    expect(gameView(state, 0).allowedActions).toEqual([{ type: "cancelProposal" }]);
     const during = applyGameAction(state, 0, {
       type: "playCard",
       card: card("spades", 14),
@@ -2084,6 +2084,76 @@ describe("complete game state", () => {
     }
   });
 
+  test("the proposer can cancel his offer, even after one answer, and the play goes on", () => {
+    const card = (suit: Suit, rank: Card["rank"]): Card => ({ suit, rank });
+    let state = orderedContract(6);
+    state = act(state, 1, { type: "defense", action: { type: "pass" } });
+    state = act(state, 2, { type: "defense", action: { type: "whist" } });
+
+    const nothing = applyGameAction(state, 0, { type: "cancelProposal" });
+    expect(nothing.accepted).toBe(false);
+    expect(nothing.reason).toBe("invalidPhase");
+
+    state = act(state, 2, { type: "propose", tricks: 4 });
+    state = act(state, 0, { type: "proposal", answer: "agree" });
+    expect(gameView(state, 2).allowedActions).toEqual([{ type: "cancelProposal" }]);
+    for (const seat of [0, 1] as const) {
+      const stranger = applyGameAction(state, seat, { type: "cancelProposal" });
+      expect(stranger.accepted).toBe(false);
+      expect(stranger.reason).toBe("notYourTurn");
+    }
+
+    state = act(state, 2, { type: "cancelProposal" });
+    expect(state.phase).toBe("play");
+    expect(state.proposal ?? null).toBeNull();
+    expect(currentWords(state)).toEqual({ 2: "отменяю" });
+    expect(state.score.bullet).toEqual([0, 0, 0]);
+    for (const seat of [0, 1, 2] as const) {
+      expect(
+        gameView(state, seat).allowedActions.some(
+          (action) => action.type === "proposal" || action.type === "cancelProposal",
+        ),
+      ).toBe(false);
+    }
+    const late = applyGameAction(state, 1, { type: "proposal", answer: "agree" });
+    expect(late.accepted).toBe(false);
+    const again = applyGameAction(state, 2, { type: "cancelProposal" });
+    expect(again.accepted).toBe(false);
+    expect(again.reason).toBe("invalidPhase");
+
+    // A fresh offer starts with no answers, so the earlier agreement doesn't count.
+    state = act(state, 2, { type: "propose", tricks: 4 });
+    expect(state.proposal?.answers).toEqual([null, null, null]);
+    state = act(state, 1, { type: "proposal", answer: "agree" });
+    expect(state.phase).toBe("play");
+    state = act(state, 2, { type: "cancelProposal" });
+
+    // The declarer's cards stay open after he cancels, as after a refusal.
+    state = act(state, 0, { type: "propose", tricks: 6 });
+    state = act(state, 0, { type: "cancelProposal" });
+    const declarerHand = [card("spades", 14), card("clubs", 9)];
+    expect(gameView(state, 1).shownHands[0]).toEqual(declarerHand);
+    expect(gameView(state, 2).shownHands[0]).toEqual(declarerHand);
+    expect(
+      gameView(state, 0).allowedActions.some((action) => action.type === "playCard"),
+    ).toBe(true);
+    state = act(state, 0, { type: "playCard", card: card("spades", 14) });
+    expect(state.play?.currentTrick).toHaveLength(1);
+  });
+
+  test("cancelling after the last answer is too late", () => {
+    let state = orderedContract(6);
+    state = act(state, 1, { type: "defense", action: { type: "pass" } });
+    state = act(state, 2, { type: "defense", action: { type: "whist" } });
+    state = act(state, 0, { type: "propose", tricks: 6 });
+    state = act(state, 1, { type: "proposal", answer: "agree" });
+    state = act(state, 2, { type: "proposal", answer: "agree" });
+    expect(state.phase).toBe("auction");
+    const late = applyGameAction(state, 0, { type: "cancelProposal" });
+    expect(late.accepted).toBe(false);
+    expect(state.deals?.[0]?.tricks).toEqual([6, 0, 4]);
+  });
+
   test("three passes stay on one step and the log ends with raspas", () => {
     let state = createGame({ ...settings, bulletTarget: 10 }, 4);
     for (const seat of [0, 1, 2] as const) {
@@ -2119,13 +2189,16 @@ describe("deal result for the end-of-deal screen", () => {
   ): { before: GameState; after: GameState } {
     let state = first;
     for (let step = 0; step < 200; step++) {
-      const seat = ([0, 1, 2] as const).find(
-        (place) => gameView(state, place).allowedActions.length > 0,
-      );
+      // The proposer can only cancel while the others answer, so he doesn't count.
+      const moves = (place: Seat) =>
+        gameView(state, place).allowedActions.filter(
+          (action) => action.type !== "cancelProposal",
+        );
+      const seat = ([0, 1, 2] as const).find((place) => moves(place).length > 0);
       if (seat === undefined) {
         throw new Error("no seat can act");
       }
-      const actions = gameView(state, seat).allowedActions;
+      const actions = moves(seat);
       const action =
         actions.find((item) => item.type === "playCard") ??
         choose(actions) ??

@@ -75,8 +75,12 @@ export function ActionPanel({
       {proposalReplies.length === 0 ? null : (
         <section className="game-actions">
           {proposalReplies.map((action) => (
-            <button type="button" key={action.answer} onClick={() => onAction(action)}>
-              {action.answer === "agree" ? "Согласен" : "Не согласен"}
+            <button
+              type="button"
+              key={action.answer ?? action.type}
+              onClick={() => onAction(action)}
+            >
+              {actionLabel(action)}
             </button>
           ))}
         </section>

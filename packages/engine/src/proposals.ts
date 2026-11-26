@@ -62,10 +62,12 @@ export function proposalOffers(state: GameState, seat: Seat): readonly GameActio
 
 export function proposalReplies(state: GameState, seat: Seat): readonly GameAction[] {
   const proposal = state.proposal;
+  if (proposal != null && seat === proposal.proposer) {
+    return [{ type: "cancelProposal" }];
+  }
   if (
     proposal == null ||
     state.auctionResult === null ||
-    seat === proposal?.proposer ||
     proposal.answers[seat] !== null
   ) {
     return [];
@@ -109,6 +111,22 @@ export function offerProposal(
     ),
     proposal: { tricks, proposer: seat, answers: [null, null, null] },
     ...(byDeclarer ? { declarerShown: true } : {}),
+  });
+}
+
+/** The proposer takes his offer back before both answers are in; answers given so far are dropped. */
+export function cancelProposal(state: GameState, seat: Seat): GameTransition {
+  const proposal = state.proposal;
+  if (proposal == null) {
+    return reject(state, "invalidPhase");
+  }
+  if (seat !== proposal.proposer) {
+    return reject(state, "notYourTurn");
+  }
+  return accept({
+    ...state,
+    ...withSpeech(state, seat, "отменяю", true),
+    proposal: null,
   });
 }
 
