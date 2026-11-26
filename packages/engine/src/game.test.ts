@@ -2170,6 +2170,81 @@ describe("complete game state", () => {
     }
   });
 
+  test("on a мизер too, the next card takes «не согласен» off the table and the log keeps it", () => {
+    const card = (suit: Suit, rank: Card["rank"]): Card => ({ suit, rank });
+    const talon = [card("spades", 7), card("spades", 8)] as const;
+    let state: GameState = {
+      settings: { ...settings, bulletTarget: 10 },
+      phase: "auction",
+      seed: 1,
+      dealNumber: 0,
+      raspasIndex: 0,
+      score: createBulletScore(),
+      dealtCards: {
+        hands: [
+          [card("hearts", 9), card("clubs", 9)],
+          [card("diamonds", 8), card("clubs", 10)],
+          [card("clubs", 7), card("diamonds", 7)],
+        ],
+        talon,
+      },
+      auction: createAuction(0),
+      auctionResult: null,
+      talon: null,
+      defense: null,
+      play: null,
+    };
+    state = act(state, 0, {
+      type: "auction",
+      action: { type: "bid", bid: { type: "misere" } },
+    });
+    state = act(state, 1, { type: "auction", action: { type: "pass" } });
+    state = act(state, 2, { type: "auction", action: { type: "pass" } });
+    state = act(state, 0, { type: "discard", cards: [...talon] });
+    state = confirmOrder(state);
+    const wordsFor = (game: GameState): Record<number, string>[] =>
+      ([0, 1, 2] as const).map((seat) => {
+        const view = gameView(game, seat);
+        const words: Record<number, string> = {};
+        for (const item of view.speech) {
+          if (item.step === view.speechStep && item.seat !== null) {
+            words[item.seat] = item.word;
+          }
+        }
+        return words;
+      });
+
+    // The мизерящий refuses a ловящий's «отдаём 0?».
+    state = act(state, 1, { type: "propose", tricks: 0 });
+    state = act(state, 0, { type: "proposal", answer: "decline" });
+    expect(wordsFor(state)).toEqual([
+      { 0: "не согласен" },
+      { 0: "не согласен" },
+      { 0: "не согласен" },
+    ]);
+    state = act(state, 0, { type: "playCard", card: card("hearts", 9) });
+    expect(wordsFor(state)).toEqual([{}, {}, {}]);
+
+    // A ловящий refuses the мизерящий's «0 запишем?».
+    state = act(state, 0, { type: "propose", tricks: 0 });
+    state = act(state, 1, { type: "proposal", answer: "decline" });
+    expect(wordsFor(state)).toEqual([
+      { 1: "не согласен" },
+      { 1: "не согласен" },
+      { 1: "не согласен" },
+    ]);
+    state = act(state, 1, { type: "playCard", card: card("diamonds", 8) });
+    expect(wordsFor(state)).toEqual([{}, {}, {}]);
+    for (const seat of [0, 1, 2] as const) {
+      expect(
+        gameView(state, seat).speech.filter((line) => line.word === "не согласен"),
+      ).toEqual([
+        expect.objectContaining({ seat: 0 }),
+        expect.objectContaining({ seat: 1 }),
+      ]);
+    }
+  });
+
   test("the proposer can cancel his offer, even after one answer, and the play goes on", () => {
     const card = (suit: Suit, rank: Card["rank"]): Card => ({ suit, rank });
     let state = orderedContract(6);
