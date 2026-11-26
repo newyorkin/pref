@@ -1,7 +1,7 @@
 import { settleBullet, type BulletScore } from "@pref/engine";
 
-import type { GameSnapshot, PlayedDeal } from "./table-types.js";
-import { playerName } from "./table-utils.js";
+import type { AuctionBid, GameSnapshot, PlayedDeal } from "./table-types.js";
+import { ContractBadge, playerName } from "./table-utils.js";
 
 export function SeatTriangle({
   viewer,
@@ -10,6 +10,7 @@ export function SeatTriangle({
   names,
   tricks,
   turn,
+  contract = null,
 }: {
   viewer: number;
   left: number;
@@ -17,6 +18,7 @@ export function SeatTriangle({
   names: readonly (string | null)[] | null;
   tricks: readonly number[];
   turn: number | null;
+  contract?: { declarer: number; bid: AuctionBid } | null;
 }): React.JSX.Element {
   const corners = [
     { seat: left, place: "left" },
@@ -32,9 +34,11 @@ export function SeatTriangle({
   } as const;
   const center = { x: 160, y: 92 };
   const arrow = target === null ? null : arrowTo(center, tip[target]);
+  // The tip is too narrow for the заказ beside «вы», so one's own заказ gets a line below the tip.
+  const ownContract = contract?.declarer === viewer;
 
   return (
-    <div className="seat-triangle">
+    <div className={ownContract ? "seat-triangle seat-triangle-own-contract" : "seat-triangle"}>
       <svg viewBox="0 0 320 188" aria-hidden={arrow === null}>
         <polygon points="160,176 22,40 298,40" className="seat-triangle-shape" />
         {arrow === null ? null : (
@@ -58,8 +62,24 @@ export function SeatTriangle({
               : `seat-corner seat-corner-${corner.place}`
           }
         >
-          <span>{playerName(corner.seat, viewer, names)}</span>
+          <span>
+            <span className="seat-corner-name">
+              {playerName(corner.seat, viewer, names)}
+            </span>
+            {contract?.declarer === corner.seat && corner.place !== "me" ? (
+              <>
+                {" "}
+                <ContractBadge bid={contract.bid} />
+              </>
+            ) : null}
+          </span>
           <strong>{tricks[corner.seat] ?? 0}</strong>
+          {ownContract && corner.place === "me" && contract !== null ? (
+            <>
+              {" "}
+              <ContractBadge bid={contract.bid} />
+            </>
+          ) : null}
         </p>
       ))}
     </div>
