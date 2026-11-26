@@ -18,7 +18,7 @@ import {
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, test } from "vitest";
 import { dealJustFinished } from "./GameTable.js";
-import { LayoutDialog } from "./table-layout.js";
+import { BulletDialog, centeredCornerSize, LayoutDialog } from "./table-layout.js";
 import {
   BulletSheet,
   DealSummary,
@@ -415,5 +415,72 @@ describe("last deal's entries on the bullet sheet", () => {
   test("writes the highlighted entries in their own color", () => {
     const css = readFileSync(new URL("./table.css", import.meta.url), "utf8");
     expect(css).toMatch(/\.pulka-fresh \{\s*fill: #1f5fbf;/);
+  });
+});
+
+describe("bullet dialog size", () => {
+  const css = readFileSync(new URL("./table.css", import.meta.url), "utf8");
+  const score: GameSnapshot["score"] = {
+    bullet: [0, 0, 0],
+    mountain: [0, 0, 0],
+    whists: [
+      [0, 0, 0],
+      [0, 0, 0],
+      [0, 0, 0],
+    ],
+  };
+
+  test("fits the dialog to the room on the screen, not to a fixed size", () => {
+    expect(css).toMatch(/\.bullet-dialog-backdrop \{\s*container-type: size;/);
+    expect(css).toMatch(
+      /\.bullet-dialog \{[^}]*width: min\(100cqw, calc\(100cqh - var\(--bullet-chrome\)\)\);/,
+    );
+    expect(css).toMatch(
+      /\.bullet-dialog \{[^}]*height: min\(100cqh, calc\(100cqw \+ var\(--bullet-chrome\)\)\);/,
+    );
+    // A size the player chose never makes the dialog bigger than the screen.
+    expect(css).toMatch(/\.bullet-dialog \{[^}]*max-width: 100cqw;\s*max-height: 100cqh;/);
+    const dialog = css.match(/\.bullet-dialog \{[^}]*\}/)?.[0] ?? "";
+    expect(dialog).not.toMatch(/40rem|44rem|dvh/);
+  });
+
+  test("lets the пуля take the room left in the dialog", () => {
+    expect(css).toMatch(/\.bullet-dialog \.pulka \{\s*flex: 1 1 0;\s*width: 100%;/);
+    expect(css).toMatch(/\.bullet-dialog \.bullet-result \{\s*flex: 0 0 auto;/);
+  });
+
+  test("keeps the close button and the resize corner, with no fixed size by default", () => {
+    const markup = renderToStaticMarkup(
+      <BulletDialog
+        score={score}
+        settlement={null}
+        viewer={0}
+        names={["Анна", "Борис", "Вера"]}
+        bulletTarget={10}
+        deals={[]}
+        onClose={() => undefined}
+      />,
+    );
+    expect(markup).toContain('<div class="bullet-dialog" role="dialog" aria-label="Пуля">');
+    expect(markup).toContain('aria-label="Размер пули"');
+    expect(markup).toContain(">Закрыть</button>");
+    expect(markup).toContain('viewBox="0 0 640 640"');
+  });
+
+  test("grows the centered dialog by twice the pointer's move", () => {
+    const limits = { minWidth: 320, maxWidth: 1000, minHeight: 260, maxHeight: 900 };
+    const origin = { x: 700, y: 100, width: 600, height: 640 };
+    expect(centeredCornerSize(origin, { x: 750, y: 70 }, limits)).toEqual({
+      width: 700,
+      height: 700,
+    });
+    expect(centeredCornerSize(origin, { x: 400, y: 600 }, limits)).toEqual({
+      width: 320,
+      height: 260,
+    });
+    expect(centeredCornerSize(origin, { x: 1200, y: -500 }, limits)).toEqual({
+      width: 1000,
+      height: 900,
+    });
   });
 });

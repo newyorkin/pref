@@ -1315,13 +1315,22 @@ section.trick.trick-play {
   background: rgba(6, 16, 12, 0.72);
 }
 
+/* The dialog fills the room the backdrop leaves inside its padding, kept close to a square
+   plus the close button's row, so the пуля inside it gets as big as the screen allows. */
+.bullet-dialog-backdrop {
+  container-type: size;
+}
+
 .bullet-dialog {
+  --bullet-chrome: 2.5rem;
   position: relative;
   display: flex;
   flex-direction: column;
-  width: min(40rem, 100%);
-  height: min(80dvh, 44rem);
-  max-height: calc(100dvh - 2.4rem);
+  width: min(100cqw, calc(100cqh - var(--bullet-chrome)));
+  height: min(100cqh, calc(100cqw + var(--bullet-chrome)));
+  /* Also caps the size the player chose, when the window gets smaller. */
+  max-width: 100cqw;
+  max-height: 100cqh;
   overflow: hidden;
   padding: 0.8rem 0.9rem 1rem;
   border: 1px solid var(--gold);
@@ -1335,9 +1344,29 @@ section.trick.trick-play {
 }
 
 .bullet-dialog .bullet-view {
+  display: flex;
   min-height: 0;
   flex: 1 1 auto;
   overflow: auto;
+}
+
+.bullet-dialog .bullet-paper {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* The пуля takes all the room left and keeps its proportions inside it. */
+.bullet-dialog .pulka {
+  flex: 1 1 0;
+  width: 100%;
+  height: auto;
+  min-height: 12rem;
+}
+
+.bullet-dialog .bullet-result {
+  flex: 0 0 auto;
 }
 
 .bullet-dialog .deal-log-resize-xy {

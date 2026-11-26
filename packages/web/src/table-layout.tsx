@@ -80,7 +80,12 @@ export const LAYOUT_SCREEN_GAP = 12;
 
 export const LAYOUT_BOX_KEY = "pref.layoutDialogBox.v1";
 
-export const BULLET_BOX_KEY = "pref.bulletDialogBox.v1";
+// v1 saved the default size on every open, not only the size the player chose, so it is not read.
+export const BULLET_BOX_KEY = "pref.bulletDialogBox.v2";
+
+export const BULLET_MIN_WIDTH = 320;
+
+export const BULLET_MIN_HEIGHT = 260;
 
 export function cornerBoxSize(
   origin: { x: number; y: number; width: number; height: number },
@@ -342,70 +347,57 @@ export function BulletDialog({
   onClose: () => void;
 }): React.JSX.Element {
   const dialogRef = useRef<HTMLDivElement>(null);
-  const [box, setBox] = useState<{
-    width: number;
-    height: number;
-    left: number;
-    bottom: number;
-  } | null>(null);
-
-  useLayoutEffect(() => {
-    if (box !== null || dialogRef.current === null) {
-      return;
-    }
-    const rect = dialogRef.current.getBoundingClientRect();
-    const saved = readDialogSize(BULLET_BOX_KEY);
-    const width = Math.min(saved?.width ?? rect.width, window.innerWidth - 24);
-    const height = Math.min(saved?.height ?? rect.height, window.innerHeight - 24);
-    setBox({
-      width,
-      height,
-      left: (window.innerWidth - width) / 2,
-      bottom: (window.innerHeight - height) / 2,
-    });
-  }, [box]);
-
-  useEffect(() => {
-    if (box === null || typeof localStorage === "undefined") {
-      return;
-    }
-    localStorage.setItem(BULLET_BOX_KEY, JSON.stringify(box));
-  }, [box]);
+  // Without a size the player chose, the CSS fits the dialog to the screen. A chosen size is
+  // only a wish: the CSS still caps it at the screen, so a smaller window never cuts the пуля.
+  const [size, setSize] = useState<{ width: number; height: number } | null>(() =>
+    readDialogSize(BULLET_BOX_KEY),
+  );
 
   function startResize(event: React.PointerEvent<HTMLDivElement>): void {
     event.preventDefault();
     event.stopPropagation();
     const dialog = dialogRef.current;
-    if (dialog === null) {
+    const area = dialog?.parentElement;
+    if (dialog == null || area == null) {
       return;
     }
     const rect = dialog.getBoundingClientRect();
+    const style = getComputedStyle(area);
+    const room = {
+      width:
+        area.clientWidth -
+        parseFloat(style.paddingLeft) -
+        parseFloat(style.paddingRight),
+      height:
+        area.clientHeight -
+        parseFloat(style.paddingTop) -
+        parseFloat(style.paddingBottom),
+    };
     const origin = {
       x: event.clientX,
       y: event.clientY,
       width: rect.width,
       height: rect.height,
-      left: rect.left,
-      bottom: window.innerHeight - rect.bottom,
+    };
+    const limits = {
+      minWidth: Math.min(BULLET_MIN_WIDTH, room.width),
+      minHeight: Math.min(BULLET_MIN_HEIGHT, room.height),
+      maxWidth: room.width,
+      maxHeight: room.height,
     };
     const handle = event.currentTarget;
+    let chosen: { width: number; height: number } | null = null;
     const move = (ev: PointerEvent): void => {
-      const size = cornerBoxSize(
-        origin,
-        { x: ev.clientX, y: ev.clientY },
-        {
-          minWidth: 320,
-          minHeight: 260,
-          maxWidth: Math.max(320, window.innerWidth - origin.left - 12),
-          maxHeight: Math.max(260, window.innerHeight - origin.bottom - 12),
-        },
-      );
-      setBox({ ...size, left: origin.left, bottom: origin.bottom });
+      chosen = centeredCornerSize(origin, { x: ev.clientX, y: ev.clientY }, limits);
+      setSize(chosen);
     };
     const end = (): void => {
       handle.removeEventListener("pointermove", move);
       handle.removeEventListener("pointerup", end);
       handle.removeEventListener("pointercancel", end);
+      if (chosen !== null && typeof localStorage !== "undefined") {
+        localStorage.setItem(BULLET_BOX_KEY, JSON.stringify(chosen));
+      }
     };
     handle.addEventListener("pointermove", move);
     handle.addEventListener("pointerup", end);
@@ -424,20 +416,7 @@ export function BulletDialog({
         className="bullet-dialog"
         role="dialog"
         aria-label="Пуля"
-        style={
-          box === null
-            ? undefined
-            : {
-                position: "fixed",
-                left: box.left,
-                bottom: box.bottom,
-                width: box.width,
-                height: box.height,
-                maxWidth: "none",
-                maxHeight: "none",
-                margin: 0,
-              }
-        }
+        style={size === null ? undefined : { width: size.width, height: size.height }}
         onClick={(event) => event.stopPropagation()}
       >
         <div
@@ -461,6 +440,30 @@ export function BulletDialog({
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * The size of a centered box whose top right corner follows the pointer. The box grows
+ * on both sides, so it grows by twice the pointer's move.
+ */
+export function centeredCornerSize(
+  origin: { x: number; y: number; width: number; height: number },
+  point: { x: number; y: number },
+  limits: {
+    minWidth: number;
+    maxWidth: number;
+    minHeight: number;
+    maxHeight: number;
+  },
+): { width: number; height: number } {
+  return cornerBoxSize(
+    origin,
+    {
+      x: origin.x + 2 * (point.x - origin.x),
+      y: origin.y + 2 * (point.y - origin.y),
+    },
+    limits,
   );
 }
 
