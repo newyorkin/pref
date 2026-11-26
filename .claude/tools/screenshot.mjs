@@ -19,6 +19,12 @@
 //     await shot("seat-1-hand", { seat: 0 });
 //   };
 //
+// start(settings?)       -> starts a new test game and returns its state. Without settings, it clicks
+//                           «Начать тест втроём» with the form's defaults. With settings, it creates the
+//                           game through the API: an object like { raspasProgression: "111", raspasExit: "666",
+//                           throwTalon: false, bulletTarget: 10 }, plus any other fields of TableSettings
+//                           (packages/web/src/App.tsx). The server checks it with isTableFormSettings
+//                           (packages/server/src/validation.ts) and answers 400 invalidSettings if it doesn't pass.
 // state()                -> { tableId, settings, snapshots: [3 × { version, state }] }, as the server sends it
 // act(seat, action)      -> sends one GameAction for a seat (0, 1 or 2); returns the new state
 // playUntil(done, choose?, maxSteps = 500)
@@ -26,8 +32,14 @@
 //                           by default the acting seat's first allowed action
 // show()                 -> reloads the page so it shows the current state (act and playUntil don't)
 // viewAs(seat)           -> switches the view to Игрок 1/2/3
-// shot(name, { seat?, fullPage?, selector? })
-//                        -> show(), optionally viewAs(seat), then saves <out>/<name>.png and prints its path
+// shot(name, { seat?, fullPage?, selector?, reload? })
+//                        -> show(), optionally viewAs(seat), then saves <out>/<name>.png and prints its path.
+//                           show() resets the view to Игрок 1 and drops anything set up in the page (a selected
+//                           card, an open menu or dialog). To keep it, pass reload: false and call show() and
+//                           viewAs() yourself before setting it up.
+//
+// If the scenario fails, the page at that moment is saved to <out>/_error/error.png. It's in a
+// subfolder so that publishing <out>/*.png doesn't pick it up.
 // page                   -> the Playwright page, for anything else
 
 import { mkdir } from "node:fs/promises";
@@ -74,16 +86,34 @@ const CONTAINER = "pref-playwright";
 
 async function startServer() {
   const { execFileSync } = await import("node:child_process");
-  execFileSync("docker", ["rm", "-f", CONTAINER], { stdio: "ignore" });
-  execFileSync("docker", [
-    "run", "-d", "--rm", "--init", "--name", CONTAINER, "-p", "127.0.0.1:3555:3555",
-    `mcr.microsoft.com/playwright:v${PLAYWRIGHT_VERSION}-noble`,
-    "/bin/sh", "-c",
-    `cd /home/pwuser && npx -y playwright@${PLAYWRIGHT_VERSION} run-server --port 3555 --host 0.0.0.0`,
-  ], { stdio: "ignore" });
+  // Errors include Docker's own message (stopped daemon, blocked socket, missing image).
+  const docker = (...args) =>
+    execFileSync("docker", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  let running = false;
+  try {
+    running = docker("inspect", "-f", "{{.State.Running}}", CONTAINER).trim() === "true";
+  } catch {
+    // No such container.
+  }
+  // A running container may still be starting, or in use by another run: wait for it, don't replace it.
+  if (!running) {
+    try {
+      docker("rm", "-f", CONTAINER);
+    } catch {
+      // Nothing to remove.
+    }
+    // No --rm, so that a container that failed to start keeps its logs.
+    docker(
+      "run", "-d", "--init", "--name", CONTAINER, "-p", "127.0.0.1:3555:3555",
+      `mcr.microsoft.com/playwright:v${PLAYWRIGHT_VERSION}-noble`,
+      "/bin/sh", "-c",
+      `cd /home/pwuser && npx -y playwright@${PLAYWRIGHT_VERSION} run-server --port 3555 --host 0.0.0.0`,
+    );
+  }
   for (let i = 0; i < 120; i++) {
-    const logs = execFileSync("docker", ["logs", CONTAINER], { encoding: "utf8" });
-    if (logs.includes("Listening")) return;
+    if (docker("logs", CONTAINER).includes("Listening")) return;
+    if (docker("inspect", "-f", "{{.State.Running}}", CONTAINER).trim() !== "true")
+      throw new Error(`The ${CONTAINER} container exited. Check: docker logs ${CONTAINER}`);
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
   throw new Error(`The ${CONTAINER} container didn't start. Check: docker logs ${CONTAINER}`);
@@ -186,8 +216,8 @@ async function viewAs(seat) {
   await page.getByRole("button", { name: names[seat], exact: true }).click();
 }
 
-async function shot(name, { seat, fullPage = false, selector } = {}) {
-  await show();
+async function shot(name, { seat, fullPage = false, selector, reload = true } = {}) {
+  if (reload) await show();
   if (seat !== undefined) await viewAs(seat);
   await page.waitForTimeout(300); // let animations settle
   const file = path.join(out, `${name}.png`);
@@ -200,7 +230,8 @@ async function shot(name, { seat, fullPage = false, selector } = {}) {
 try {
   await scenario({ page, start, state, act, playUntil, show, viewAs, shot });
 } catch (error) {
-  const file = path.join(out, "error.png");
+  const file = path.join(out, "_error", "error.png");
+  await mkdir(path.dirname(file), { recursive: true });
   await page.screenshot({ path: file, fullPage: true }).catch(() => {});
   console.error(`Scenario failed. The page at that moment: ${file}`);
   throw error;

@@ -7,9 +7,9 @@
 # Set DRY_RUN=1 to build the commit without pushing it.
 set -eu
 
+[ $# -ge 2 ] || { echo "Usage: $0 <issue number> <file.png>..." >&2; exit 2; }
 issue=$1
 shift
-[ $# -gt 0 ] || { echo "Usage: $0 <issue number> <file.png>..." >&2; exit 2; }
 
 branch=pr-screenshots
 repo=$(gh repo view --json nameWithOwner -q .nameWithOwner)
