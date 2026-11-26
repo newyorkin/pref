@@ -1240,7 +1240,7 @@ section.trick.trick-play {
   border: 1px solid var(--gold);
   border-radius: 0.4rem;
   color: var(--gold);
-  font-size: 0.62rem;
+  font-size: 0.7rem;
   line-height: 1.3;
   white-space: nowrap;
 }
