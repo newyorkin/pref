@@ -730,21 +730,23 @@ function continueRaspas(
   ) {
     return { ...state, play };
   }
-  if (play.completedTricks === 1) {
+  // The player on the first word leads the first three tricks, whoever took them.
+  if (play.completedTricks < 3) {
+    const leader = firstLeader(state.dealNumber);
+    if (play.completedTricks === 1) {
+      return {
+        ...state,
+        prikupShown: 2,
+        play: {
+          ...play,
+          forcedSuit: state.raspasOrder[1].suit,
+          turn: leader,
+        },
+      };
+    }
     return {
       ...state,
-      prikupShown: 2,
-      play: { ...play, forcedSuit: state.raspasOrder[1].suit },
-    };
-  }
-  if (play.completedTricks === 2) {
-    return {
-      ...state,
-      play: {
-        ...play,
-        turn: firstLeader(state.dealNumber),
-        forcedSuit: null,
-      },
+      play: { ...play, turn: leader, forcedSuit: null },
     };
   }
   return { ...state, play };
