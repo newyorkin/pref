@@ -478,7 +478,8 @@ describe("complete game state", () => {
       2,
       { type: "auction", action: { type: "pass" } },
     );
-    expect(gameView(misere, 1).talonCards).toEqual([...talon]);
+    expect(gameView(misere, 1).talonCards).toEqual([]);
+    expect(gameView(misere, 2).talonCards).toEqual([]);
     expect(gameView(misere, 0).talonCards).toEqual([...talon]);
     expect(gameView(misere, 1).discarded).toEqual([]);
     const discardedMisere = confirmOrder(
@@ -1387,7 +1388,7 @@ describe("complete game state", () => {
     expect(stayed.play?.trump).toBeNull();
   });
 
-  test("misere shows the declarer until the second call, then the defenders play their own cards", () => {
+  test("misere keeps the declarer's widow, discard and hand closed, then opens the defenders", () => {
     const card = (suit: Suit, rank: Card["rank"]): Card => ({ suit, rank });
     const talon = [card("spades", 7), card("spades", 8)] as const;
     const declarer = [card("hearts", 9), card("clubs", 9)] as const;
@@ -1414,23 +1415,28 @@ describe("complete game state", () => {
     state = act(state, 1, { type: "auction", action: { type: "pass" } });
     state = act(state, 2, { type: "auction", action: { type: "pass" } });
 
-    const opened = [...declarer, ...talon];
     expect(state.phase).toBe("discard");
-    expect(gameView(state, 1).shownHands[0]).toEqual(opened);
-    expect(gameView(state, 1).shownHands[1]).toBeNull();
-    expect(gameView(state, 1).shownHands[2]).toBeNull();
+    expect(gameView(state, 1).shownHands).toEqual([null, null, null]);
+    expect(gameView(state, 1).talonCards).toEqual([]);
+    expect(gameView(state, 1).discarded).toEqual([]);
+    expect(gameView(state, 0).talonCards).toEqual([...talon]);
     expect(gameView(state, 0).shownHands).toEqual([null, null, null]);
-    expect(JSON.stringify(gameView(state, 1).hand)).not.toContain("hearts");
-    expect(JSON.stringify(gameView(state, 1).shownHands[2])).toBe("null");
+    expect(JSON.stringify(gameView(state, 1))).not.toContain("hearts");
+    expect(JSON.stringify(gameView(state, 1))).not.toContain("spades");
 
     state = act(state, 0, { type: "discard", cards: [...talon] });
-    expect(gameView(state, 2).shownHands[0]).toEqual([...declarer]);
-    expect(gameView(state, 2).discarded).toEqual([...talon]);
+    expect(gameView(state, 2).shownHands).toEqual([null, null, null]);
+    expect(gameView(state, 2).discarded).toEqual([]);
+    expect(gameView(state, 2).talonCards).toEqual([]);
+    expect(gameView(state, 0).discarded).toEqual([...talon]);
     expect(gameView(state, 0).shownHands[1]).toBeNull();
+    expect(JSON.stringify(gameView(state, 2))).not.toContain("spades");
 
     state = act(state, 0, { type: "order", bid: { type: "misere" } });
     expect(state.phase).toBe("order");
-    expect(gameView(state, 1).shownHands[0]).toEqual([...declarer]);
+    expect(gameView(state, 1).shownHands).toEqual([null, null, null]);
+    expect(gameView(state, 1).discarded).toEqual([]);
+    expect(gameView(state, 1).talonCards).toEqual([]);
     const early = applyGameAction(state, 1, {
       type: "order",
       bid: { type: "misere" },
@@ -1441,7 +1447,12 @@ describe("complete game state", () => {
     state = act(state, 0, { type: "order", bid: { type: "misere" } });
     expect(state.phase).toBe("play");
     expect(gameView(state, 1).shownHands[0]).toBeNull();
+    expect(gameView(state, 1).discarded).toEqual([]);
+    expect(gameView(state, 1).talonCards).toEqual([]);
+    expect(gameView(state, 0).discarded).toEqual([...talon]);
     expect(JSON.stringify(gameView(state, 1))).not.toContain("hearts");
+    expect(JSON.stringify(gameView(state, 1))).not.toContain("spades");
+    expect(JSON.stringify(gameView(state, 2))).not.toContain("spades");
     expect(gameView(state, 0).shownHands[1]).toEqual([...left]);
     expect(gameView(state, 0).shownHands[2]).toEqual([...right]);
     expect(gameView(state, 1).shownHands[2]).toEqual([...right]);

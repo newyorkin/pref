@@ -39,7 +39,6 @@ import {
   declarerOpens,
   gameTurn,
   lightPartners,
-  misereCardsOpen,
   openWhistHand,
   playedHand,
   shownWhistHands,
@@ -459,11 +458,11 @@ export function gameView(state: GameState, seat: Seat): GameSeatView {
     ),
     dealNumber: state.dealNumber,
     trump: contractTrump(state),
-    talonCards: visibleTalon(state),
+    talonCards: visibleTalon(state, seat),
     discarded:
       state.talon === null
         ? []
-        : state.talon.faced || state.talon.declarer === seat || misereCardsOpen(state)
+        : state.talon.faced || state.talon.declarer === seat
           ? state.talon.discarded
           : [],
     facedTalon: state.talon?.faced === true,

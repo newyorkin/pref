@@ -1,6 +1,6 @@
 import { type Seat, type Trump } from "./auction.js";
 import { type Card } from "./deck.js";
-import { currentHands, firstLeader } from "./game-state.js";
+import { firstLeader } from "./game-state.js";
 import type { GameState } from "./game-types.js";
 
 export function lightPartners(
@@ -38,13 +38,6 @@ export function openWhistHand(state: GameState): readonly Card[] {
   return state.play.hands[partners.passer];
 }
 
-export function misereCardsOpen(state: GameState): boolean {
-  return (
-    state.auctionResult?.type === "misere" &&
-    (state.phase === "discard" || state.phase === "order")
-  );
-}
-
 export function shownWhistHands(
   state: GameState,
   viewer: Seat,
@@ -55,19 +48,12 @@ export function shownWhistHands(
     readonly Card[] | null,
   ];
   if (state.auctionResult?.type === "misere") {
-    const hands = [...hidden] as [
-      readonly Card[] | null,
-      readonly Card[] | null,
-      readonly Card[] | null,
-    ];
-    if (misereCardsOpen(state)) {
-      const declarer = state.auctionResult.declarer;
-      if (declarer !== viewer) {
-        hands[declarer] = currentHands(state)[declarer];
-      }
-      return hands;
-    }
     if (state.phase === "play" && state.play !== null) {
+      const hands = [...hidden] as [
+        readonly Card[] | null,
+        readonly Card[] | null,
+        readonly Card[] | null,
+      ];
       const declarer = state.auctionResult.declarer;
       for (const seat of [0, 1, 2] as const) {
         if (seat !== declarer && seat !== viewer) {
@@ -133,9 +119,12 @@ export function gameTurn(state: GameState): Seat | null {
   return null;
 }
 
-export function visibleTalon(state: GameState): readonly Card[] {
+export function visibleTalon(state: GameState, viewer: Seat): readonly Card[] {
   const result = state.auctionResult;
   if (result?.type !== "contract" && result?.type !== "misere") {
+    return [];
+  }
+  if (result.type === "misere" && result.declarer !== viewer) {
     return [];
   }
   const choosingWhist = state.phase === "defense" && state.defense?.phase === "whist";
