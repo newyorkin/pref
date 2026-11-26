@@ -1622,7 +1622,7 @@ describe("complete game state", () => {
     expect(gameView(state, 1).lastLayout?.hands[0]).toHaveLength(10);
   });
 
-  test("raspas talon only sets the suit and the third lead returns", () => {
+  test("raspas talon only sets the suit and the first speaker leads the first three tricks", () => {
     const card = (suit: Suit, rank: Card["rank"]): Card => ({ suit, rank });
     const state: GameState = {
       settings: { ...settings, bulletTarget: 10 },
@@ -1633,9 +1633,24 @@ describe("complete game state", () => {
       score: createBulletScore(),
       dealtCards: {
         hands: [
-          [card("spades", 8), card("clubs", 8), card("diamonds", 8)],
-          [card("spades", 14), card("hearts", 8), card("clubs", 9)],
-          [card("spades", 9), card("hearts", 14), card("diamonds", 9)],
+          [
+            card("spades", 8),
+            card("clubs", 8),
+            card("diamonds", 8),
+            card("clubs", 7),
+          ],
+          [
+            card("spades", 14),
+            card("hearts", 8),
+            card("clubs", 9),
+            card("clubs", 10),
+          ],
+          [
+            card("spades", 9),
+            card("hearts", 14),
+            card("diamonds", 9),
+            card("clubs", 11),
+          ],
         ],
         talon: [card("spades", 7), card("hearts", 7)],
       },
@@ -1673,7 +1688,7 @@ describe("complete game state", () => {
     raspas = act(raspas, 2, { type: "playCard", card: card("hearts", 14) });
     expect(raspas.play?.tricksWon).toEqual([0, 0, 1]);
     expect(raspas.play?.currentTrick).toEqual([]);
-    expect(raspas.play?.turn).toBe(2);
+    expect(raspas.play?.turn).toBe(0);
     expect(raspas.play?.forcedSuit).toBe("spades");
     expect(gameView(raspas, 0).prikup).toEqual([card("spades", 7)]);
     expect(gameView(raspas, 1).prikup).toEqual([card("spades", 7)]);
@@ -1689,10 +1704,16 @@ describe("complete game state", () => {
         ],
       },
     ]);
+    const secondLead = applyGameAction(raspas, 2, {
+      type: "playCard",
+      card: card("spades", 9),
+    });
+    expect(secondLead.accepted).toBe(false);
+    expect(secondLead.reason).toBe("notYourTurn");
 
-    raspas = act(raspas, 2, { type: "playCard", card: card("spades", 9) });
     raspas = act(raspas, 0, { type: "playCard", card: card("spades", 8) });
     raspas = act(raspas, 1, { type: "playCard", card: card("spades", 14) });
+    raspas = act(raspas, 2, { type: "playCard", card: card("spades", 9) });
     expect(raspas.play?.tricksWon).toEqual([0, 1, 1]);
     expect(raspas.play?.turn).toBe(0);
     expect(raspas.play?.forcedSuit ?? null).toBeNull();
@@ -1702,15 +1723,16 @@ describe("complete game state", () => {
       winner: 1,
       talonCard: card("spades", 7),
       cards: [
-        { seat: 2, card: card("spades", 9) },
         { seat: 0, card: card("spades", 8) },
         { seat: 1, card: card("spades", 14) },
+        { seat: 2, card: card("spades", 9) },
       ],
     });
 
     raspas = act(raspas, 0, { type: "playCard", card: card("diamonds", 8) });
     raspas = act(raspas, 1, { type: "playCard", card: card("clubs", 9) });
     raspas = act(raspas, 2, { type: "playCard", card: card("diamonds", 9) });
+    expect(raspas.play?.turn).toBe(2);
     expect(gameView(raspas, 2).trickHistory[2]).toEqual({
       winner: 2,
       cards: [
@@ -1719,6 +1741,13 @@ describe("complete game state", () => {
         { seat: 2, card: card("diamonds", 9) },
       ],
     });
+    const fourthLead = applyGameAction(raspas, 0, {
+      type: "playCard",
+      card: card("clubs", 7),
+    });
+    expect(fourthLead.accepted).toBe(false);
+    expect(fourthLead.reason).toBe("notYourTurn");
+    raspas = act(raspas, 2, { type: "playCard", card: card("clubs", 11) });
     expect(gameView(raspas, 0).trickHistory[0]?.talonCard).toEqual(
       card("hearts", 7),
     );
