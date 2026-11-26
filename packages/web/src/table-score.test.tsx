@@ -330,7 +330,11 @@ function chainLinesOf(markup: string): { text: string; size: number }[][] {
 }
 
 describe("deal points in the results file", () => {
-  const quiet = [zeros(), zeros(), zeros()];
+  const quiet = [zeros(), zeros(), zeros()] as [
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+  ];
 
   test("prices one mountain point at 10/3 and leaves the bullet out", () => {
     const mountain = [0, 3, 6];
