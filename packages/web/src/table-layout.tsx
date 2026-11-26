@@ -352,10 +352,20 @@ export function BulletDialog({
   const [size, setSize] = useState<{ width: number; height: number } | null>(() =>
     readDialogSize(BULLET_BOX_KEY),
   );
+  // The last press on the resize corner that didn't resize, for a double press.
+  const lastPress = useRef<CornerPress | null>(null);
 
   function startResize(event: React.PointerEvent<HTMLDivElement>): void {
     event.preventDefault();
     event.stopPropagation();
+    const press = { x: event.clientX, y: event.clientY, time: event.timeStamp };
+    if (isDoublePress(lastPress.current, press)) {
+      // The second press only resets: it neither resizes nor saves a size.
+      lastPress.current = null;
+      setSize(resetDialogSize(BULLET_BOX_KEY));
+      return;
+    }
+    lastPress.current = press;
     const dialog = dialogRef.current;
     const area = dialog?.parentElement;
     if (dialog == null || area == null) {
@@ -399,6 +409,10 @@ export function BulletDialog({
       handle.removeEventListener("pointerup", end);
       handle.removeEventListener("pointercancel", end);
       finishResize(BULLET_BOX_KEY, chosen);
+      if (chosen !== null) {
+        // A drag isn't the first half of a double press.
+        lastPress.current = null;
+      }
     };
     handle.addEventListener("pointermove", move);
     handle.addEventListener("pointerup", end);
@@ -424,9 +438,8 @@ export function BulletDialog({
           className="deal-log-resize deal-log-resize-xy"
           role="separator"
           aria-label="Размер пули"
-          title="Двойной щелчок — размер по экрану"
+          title="Двойное нажатие — размер по экрану"
           onPointerDown={startResize}
-          onDoubleClick={() => setSize(resetDialogSize(BULLET_BOX_KEY))}
         />
         <button type="button" className="bullet-close" onClick={onClose}>
           Закрыть
@@ -443,6 +456,31 @@ export function BulletDialog({
         </div>
       </div>
     </div>
+  );
+}
+
+/** A press on the resize corner: where, and when (the event's timeStamp, in ms). */
+export type CornerPress = { x: number; y: number; time: number };
+
+/** The longest time, in ms, between the two presses of a double press. */
+export const DOUBLE_PRESS_TIME = 300;
+
+/** The farthest apart, in pixels, the two presses of a double press can be. */
+export const DOUBLE_PRESS_DISTANCE = 10;
+
+/**
+ * Whether `press` is the second half of a double press on the resize corner. Pointer events
+ * work the same for a mouse, a finger and a pen, unlike dblclick, which phones may not send.
+ */
+export function isDoublePress(previous: CornerPress | null, press: CornerPress): boolean {
+  if (previous === null) {
+    return false;
+  }
+  const elapsed = press.time - previous.time;
+  return (
+    elapsed >= 0 &&
+    elapsed <= DOUBLE_PRESS_TIME &&
+    Math.hypot(press.x - previous.x, press.y - previous.y) <= DOUBLE_PRESS_DISTANCE
   );
 }
 
@@ -514,7 +552,7 @@ export function finishResize(
 }
 
 /**
- * A double-click on the resize corner: drops the saved size and returns the dialog's new size,
+ * A double press on the resize corner: drops the saved size and returns the dialog's new size,
  * null, so it goes back to the automatic size now and on the next open.
  */
 export function resetDialogSize(key: string): null {

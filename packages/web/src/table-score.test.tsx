@@ -23,6 +23,7 @@ import {
   BulletDialog,
   centeredCornerSize,
   finishResize,
+  isDoublePress,
   LayoutDialog,
   movedPastDeadZone,
   resetDialogSize,
@@ -520,10 +521,10 @@ describe("bullet dialog size", () => {
     expect(markup).toContain('<div class="bullet-dialog" role="dialog" aria-label="Пуля">');
   });
 
-  test("a double-click on the resize corner goes back to the size by the screen", () => {
+  test("a double press on the resize corner goes back to the size by the screen", () => {
     const stored = { [BULLET_BOX_KEY]: JSON.stringify({ width: 500, height: 540 }) };
-    expect(renderWithStorage(stored)).toContain('title="Двойной щелчок — размер по экрану"');
-    // The corner's double-click handler sets the dialog's size to what this returns.
+    expect(renderWithStorage(stored)).toContain('title="Двойное нажатие — размер по экрану"');
+    // On a double press, the corner's handler sets the dialog's size to what this returns.
     expect(resetDialogSize(BULLET_BOX_KEY)).toBeNull();
     expect(stored).toEqual({});
     expect(renderWithStorage(stored)).toContain(
@@ -540,6 +541,19 @@ describe("bullet dialog size", () => {
       /\.bullet-dialog \{[^}]*height: min\(100cqh, calc\(100cqw - var\(--bullet-chrome\)\)\);/,
     );
     expect(landscape).toMatch(/\.bullet-dialog \.bullet-close \{\s*align-self: flex-start;/);
+  });
+
+  test("counts two quick presses close together as a double press, for a mouse or a finger", () => {
+    const first = { x: 700, y: 100, time: 1000 };
+    expect(isDoublePress(null, first)).toBe(false);
+    expect(isDoublePress(first, { x: 700, y: 100, time: 1200 })).toBe(true);
+    expect(isDoublePress(first, { x: 706, y: 108, time: 1300 })).toBe(true);
+    // Too slow.
+    expect(isDoublePress(first, { x: 700, y: 100, time: 1301 })).toBe(false);
+    // Too far apart.
+    expect(isDoublePress(first, { x: 711, y: 100, time: 1100 })).toBe(false);
+    // Out of order.
+    expect(isDoublePress(first, { x: 700, y: 100, time: 900 })).toBe(false);
   });
 
   test("doesn't count a tap or a jitter on the resize corner as a resize", () => {
