@@ -388,7 +388,12 @@ export function BulletDialog({
     const handle = event.currentTarget;
     let chosen: { width: number; height: number } | null = null;
     const move = (ev: PointerEvent): void => {
-      chosen = centeredCornerSize(origin, { x: ev.clientX, y: ev.clientY }, limits);
+      const point = { x: ev.clientX, y: ev.clientY };
+      // A tap or a shaky click on the corner isn't a resize, so it doesn't pin the size.
+      if (chosen === null && !movedPastDeadZone(origin, point)) {
+        return;
+      }
+      chosen = centeredCornerSize(origin, point, limits);
       setSize(chosen);
     };
     const end = (): void => {
@@ -446,6 +451,16 @@ export function BulletDialog({
       </div>
     </div>
   );
+}
+
+/** How far, in pixels, the pointer must move on the resize corner before it counts as a resize. */
+export const RESIZE_DEAD_ZONE = 4;
+
+export function movedPastDeadZone(
+  origin: { x: number; y: number },
+  point: { x: number; y: number },
+): boolean {
+  return Math.hypot(point.x - origin.x, point.y - origin.y) >= RESIZE_DEAD_ZONE;
 }
 
 /**

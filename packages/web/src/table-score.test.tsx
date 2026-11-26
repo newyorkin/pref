@@ -24,6 +24,7 @@ import {
   centeredCornerSize,
   forgetDialogSize,
   LayoutDialog,
+  movedPastDeadZone,
 } from "./table-layout.js";
 import {
   BulletSheet,
@@ -535,6 +536,14 @@ describe("bullet dialog size", () => {
       /\.bullet-dialog \{[^}]*height: min\(100cqh, calc\(100cqw - var\(--bullet-chrome\)\)\);/,
     );
     expect(landscape).toMatch(/\.bullet-dialog \.bullet-close \{\s*align-self: flex-start;/);
+  });
+
+  test("doesn't count a tap or a jitter on the resize corner as a resize", () => {
+    const origin = { x: 700, y: 100 };
+    expect(movedPastDeadZone(origin, { x: 700, y: 100 })).toBe(false);
+    expect(movedPastDeadZone(origin, { x: 702, y: 98 })).toBe(false);
+    expect(movedPastDeadZone(origin, { x: 704, y: 100 })).toBe(true);
+    expect(movedPastDeadZone(origin, { x: 697, y: 104 })).toBe(true);
   });
 
   test("grows the centered dialog by twice the pointer's move", () => {
