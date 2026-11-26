@@ -22,9 +22,11 @@ import {
   BULLET_BOX_KEY,
   BulletDialog,
   centeredCornerSize,
-  forgetDialogSize,
+  finishResize,
   LayoutDialog,
   movedPastDeadZone,
+  resetDialogSize,
+  resizeStep,
 } from "./table-layout.js";
 import {
   BulletSheet,
@@ -477,7 +479,9 @@ describe("bullet dialog size", () => {
   function renderWithStorage(stored: Record<string, string>): string {
     vi.stubGlobal("localStorage", {
       getItem: (key: string) => stored[key] ?? null,
-      setItem: () => undefined,
+      setItem: (key: string, value: string) => {
+        stored[key] = value;
+      },
       removeItem: (key: string) => {
         delete stored[key];
       },
@@ -519,8 +523,8 @@ describe("bullet dialog size", () => {
   test("a double-click on the resize corner goes back to the size by the screen", () => {
     const stored = { [BULLET_BOX_KEY]: JSON.stringify({ width: 500, height: 540 }) };
     expect(renderWithStorage(stored)).toContain('title="Двойной щелчок — размер по экрану"');
-    // The corner's double-click forgets the saved size, so the next open is automatic.
-    forgetDialogSize(BULLET_BOX_KEY);
+    // The corner's double-click handler sets the dialog's size to what this returns.
+    expect(resetDialogSize(BULLET_BOX_KEY)).toBeNull();
     expect(stored).toEqual({});
     expect(renderWithStorage(stored)).toContain(
       '<div class="bullet-dialog" role="dialog" aria-label="Пуля">',
@@ -544,6 +548,33 @@ describe("bullet dialog size", () => {
     expect(movedPastDeadZone(origin, { x: 702, y: 98 })).toBe(false);
     expect(movedPastDeadZone(origin, { x: 704, y: 100 })).toBe(true);
     expect(movedPastDeadZone(origin, { x: 697, y: 104 })).toBe(true);
+  });
+
+  test("resizes only once the pointer leaves the dead zone, then follows it", () => {
+    const limits = { minWidth: 320, maxWidth: 1000, minHeight: 260, maxHeight: 900 };
+    const origin = { x: 700, y: 100, width: 600, height: 640 };
+    // A jitter: no size yet.
+    expect(resizeStep(origin, { x: 702, y: 99 }, limits, null)).toBeNull();
+    // Out of the dead zone: the size follows the pointer.
+    const first = resizeStep(origin, { x: 750, y: 70 }, limits, null);
+    expect(first).toEqual({ width: 700, height: 700 });
+    // Once resizing, coming back near the start still resizes.
+    expect(resizeStep(origin, { x: 701, y: 100 }, limits, first)).toEqual({
+      width: 602,
+      height: 640,
+    });
+  });
+
+  test("saves the size only when a drag on the corner resized the dialog", () => {
+    const stored: Record<string, string> = {};
+    renderWithStorage(stored);
+    // Opening the dialog saves nothing.
+    expect(stored).toEqual({});
+    // A tap or a jitter ends without a size.
+    finishResize(BULLET_BOX_KEY, null);
+    expect(stored).toEqual({});
+    finishResize(BULLET_BOX_KEY, { width: 500, height: 540 });
+    expect(JSON.parse(stored[BULLET_BOX_KEY] ?? "null")).toEqual({ width: 500, height: 540 });
   });
 
   test("grows the centered dialog by twice the pointer's move", () => {

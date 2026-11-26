@@ -388,21 +388,17 @@ export function BulletDialog({
     const handle = event.currentTarget;
     let chosen: { width: number; height: number } | null = null;
     const move = (ev: PointerEvent): void => {
-      const point = { x: ev.clientX, y: ev.clientY };
-      // A tap or a shaky click on the corner isn't a resize, so it doesn't pin the size.
-      if (chosen === null && !movedPastDeadZone(origin, point)) {
-        return;
+      const next = resizeStep(origin, { x: ev.clientX, y: ev.clientY }, limits, chosen);
+      if (next !== chosen) {
+        chosen = next;
+        setSize(next);
       }
-      chosen = centeredCornerSize(origin, point, limits);
-      setSize(chosen);
     };
     const end = (): void => {
       handle.removeEventListener("pointermove", move);
       handle.removeEventListener("pointerup", end);
       handle.removeEventListener("pointercancel", end);
-      if (chosen !== null && typeof localStorage !== "undefined") {
-        localStorage.setItem(BULLET_BOX_KEY, JSON.stringify(chosen));
-      }
+      finishResize(BULLET_BOX_KEY, chosen);
     };
     handle.addEventListener("pointermove", move);
     handle.addEventListener("pointerup", end);
@@ -430,10 +426,7 @@ export function BulletDialog({
           aria-label="Размер пули"
           title="Двойной щелчок — размер по экрану"
           onPointerDown={startResize}
-          onDoubleClick={() => {
-            forgetDialogSize(BULLET_BOX_KEY);
-            setSize(null);
-          }}
+          onDoubleClick={() => setSize(resetDialogSize(BULLET_BOX_KEY))}
         />
         <button type="button" className="bullet-close" onClick={onClose}>
           Закрыть
@@ -487,12 +480,48 @@ export function centeredCornerSize(
   );
 }
 
-/** Drops a dialog's saved size, so it opens at its automatic size again. */
-export function forgetDialogSize(key: string): void {
-  if (typeof localStorage === "undefined") {
+/**
+ * One pointer move on the resize corner: the dialog's new size, or `chosen` unchanged while
+ * the pointer hasn't left the dead zone yet. A tap or a shaky click on the corner isn't a
+ * resize, so it doesn't pin the size. `chosen` is null until the drag resizes the dialog.
+ */
+export function resizeStep(
+  origin: { x: number; y: number; width: number; height: number },
+  point: { x: number; y: number },
+  limits: {
+    minWidth: number;
+    maxWidth: number;
+    minHeight: number;
+    maxHeight: number;
+  },
+  chosen: { width: number; height: number } | null,
+): { width: number; height: number } | null {
+  if (chosen === null && !movedPastDeadZone(origin, point)) {
+    return chosen;
+  }
+  return centeredCornerSize(origin, point, limits);
+}
+
+/** The end of a drag on the resize corner: saves the size only if the drag resized the dialog. */
+export function finishResize(
+  key: string,
+  chosen: { width: number; height: number } | null,
+): void {
+  if (chosen === null || typeof localStorage === "undefined") {
     return;
   }
-  localStorage.removeItem(key);
+  localStorage.setItem(key, JSON.stringify(chosen));
+}
+
+/**
+ * A double-click on the resize corner: drops the saved size and returns the dialog's new size,
+ * null, so it goes back to the automatic size now and on the next open.
+ */
+export function resetDialogSize(key: string): null {
+  if (typeof localStorage !== "undefined") {
+    localStorage.removeItem(key);
+  }
+  return null;
 }
 
 export function readDialogSize(key: string): { width: number; height: number } | null {
