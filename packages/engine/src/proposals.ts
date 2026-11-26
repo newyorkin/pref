@@ -11,7 +11,9 @@ import type {
 } from "./game-types.js";
 import { styleChoiceDue } from "./hand-view.js";
 import { type ScoredDeal } from "./scoring.js";
-import { withSpeech } from "./speech.js";
+import { advanceSpeech, withSpeech } from "./speech.js";
+
+export const DECLINE_WORD = "не согласен";
 
 export function proposalAvailable(state: GameState): boolean {
   const misere = state.auctionResult?.type === "misere";
@@ -148,7 +150,7 @@ export function answerProposal(
   if (answer === "decline") {
     return accept({
       ...state,
-      ...withSpeech(state, seat, "не согласен", true),
+      ...withSpeech(state, seat, DECLINE_WORD, true),
       proposal: null,
     });
   }
@@ -166,6 +168,15 @@ export function answerProposal(
     (place) => place === proposal.proposer || answers[place] === "agree",
   );
   return accept(both ? finishProposal(voiced, dealSource) : voiced);
+}
+
+/** The first card after a refused offer takes the «не согласен» bubble off the table; the log keeps the line. */
+export function clearRefusal(state: GameState): GameState {
+  const step = state.speechStep ?? 0;
+  const refused = (state.speech ?? []).some(
+    (line) => line.step === step && line.word === DECLINE_WORD,
+  );
+  return refused ? { ...state, ...advanceSpeech(state) } : state;
 }
 
 export function finishProposal(state: GameState, dealSource?: () => Deal): GameState {

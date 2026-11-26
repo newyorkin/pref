@@ -49,6 +49,7 @@ import {
 import {
   answerProposal,
   cancelProposal,
+  clearRefusal,
   offerProposal,
   proposalOffers,
   proposalReplies,
@@ -424,10 +425,11 @@ export function applyGameAction(
   if (state.auctionResult?.type === "raspas") {
     return accept(continueRaspas(state, transition.state, dealSource));
   }
+  const resumed = clearRefusal(state);
   if (transition.state.result === null) {
-    return accept({ ...state, play: transition.state });
+    return accept({ ...resumed, play: transition.state });
   }
-  return accept(finishDeal({ ...state, play: transition.state }, dealSource));
+  return accept(finishDeal({ ...resumed, play: transition.state }, dealSource));
 }
 
 export function gameView(state: GameState, seat: Seat): GameSeatView {

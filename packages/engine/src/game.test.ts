@@ -2027,6 +2027,84 @@ describe("complete game state", () => {
     ]);
   });
 
+  test("the next card takes «не согласен» off the table, the log keeps it, and nothing carries over", () => {
+    const card = (suit: Suit, rank: Card["rank"]): Card => ({ suit, rank });
+    const wordsFor = (game: GameState): Record<number, string>[] =>
+      ([0, 1, 2] as const).map((seat) => {
+        const view = gameView(game, seat);
+        const words: Record<number, string> = {};
+        for (const item of view.speech) {
+          if (item.step === view.speechStep && item.seat !== null) {
+            words[item.seat] = item.word;
+          }
+        }
+        return words;
+      });
+    const refusals = (game: GameState, seat: Seat): number =>
+      gameView(game, seat).speech.filter((line) => line.word === "не согласен").length;
+    let state = orderedContract(6);
+    state = act(state, 1, { type: "defense", action: { type: "pass" } });
+    state = act(state, 2, { type: "defense", action: { type: "whist" } });
+
+    // The whistler refuses the declarer's offer.
+    state = act(state, 0, { type: "propose", tricks: 6 });
+    state = act(state, 2, { type: "proposal", answer: "decline" });
+    expect(wordsFor(state)).toEqual([
+      { 2: "не согласен" },
+      { 2: "не согласен" },
+      { 2: "не согласен" },
+    ]);
+    state = act(state, 0, { type: "playCard", card: card("spades", 14) });
+    expect(wordsFor(state)).toEqual([{}, {}, {}]);
+    for (const seat of [0, 1, 2] as const) {
+      expect(refusals(state, seat)).toBe(1);
+    }
+    state = act(state, 2, { type: "defense", action: { type: "light" } });
+
+    // The passer refuses the whistler's offer; the whistler plays the passer's open hand.
+    state = act(state, 2, { type: "propose", tricks: 4 });
+    state = act(state, 1, { type: "proposal", answer: "decline" });
+    expect(wordsFor(state)[0]).toEqual({ 1: "не согласен" });
+    state = act(state, 2, { type: "playCard", card: card("hearts", 7) });
+    expect(wordsFor(state)).toEqual([{}, {}, {}]);
+
+    // The declarer refuses, and a new offer shows only its own words.
+    state = act(state, 2, { type: "propose", tricks: 4 });
+    state = act(state, 0, { type: "proposal", answer: "decline" });
+    expect(wordsFor(state)[1]).toEqual({ 0: "не согласен" });
+    state = act(state, 2, { type: "propose", tricks: 4 });
+    expect(wordsFor(state)).toEqual([
+      { 2: "отдаём 4?" },
+      { 2: "отдаём 4?" },
+      { 2: "отдаём 4?" },
+    ]);
+    state = act(state, 1, { type: "proposal", answer: "decline" });
+    for (const seat of [0, 1, 2] as const) {
+      expect(refusals(state, seat)).toBe(4);
+    }
+    state = act(state, 2, { type: "playCard", card: card("spades", 13) });
+    expect(wordsFor(state)).toEqual([{}, {}, {}]);
+
+    // Refusals from this deal don't reach the next one.
+    state = act(state, 0, { type: "propose", tricks: 6 });
+    state = act(state, 1, { type: "proposal", answer: "decline" });
+    state = act(state, 0, { type: "propose", tricks: 6 });
+    state = act(state, 1, { type: "proposal", answer: "agree" });
+    state = act(state, 2, { type: "proposal", answer: "agree" });
+    expect(state.phase).toBe("auction");
+    expect(state.dealNumber).toBe(1);
+    expect(wordsFor(state)).toEqual([{}, {}, {}]);
+    expect(
+      state.speechLog?.[0]?.lines.filter((line) => line.word === "не согласен"),
+    ).toEqual([
+      expect.objectContaining({ seat: 2 }),
+      expect.objectContaining({ seat: 1 }),
+      expect.objectContaining({ seat: 0 }),
+      expect.objectContaining({ seat: 1 }),
+      expect.objectContaining({ seat: 1 }),
+    ]);
+  });
+
   test("a misere declarer's proposal opens his cards to both defenders", () => {
     const card = (suit: Suit, rank: Card["rank"]): Card => ({ suit, rank });
     const talon = [card("spades", 7), card("spades", 8)] as const;
