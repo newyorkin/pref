@@ -133,6 +133,192 @@ export function arrowTo(
   };
 }
 
+// The sheet's lines, in the SVG's units. The пуля is drawn for the viewer: the left and the
+// right player's fields run along the sides, the viewer's fields along the bottom.
+const leftEdge = 28;
+const rightEdge = 612;
+const topEdge = 28;
+const bottomEdge = 612;
+const mid = 320;
+const westWhist = leftEdge + 112;
+const westPool = westWhist + 68;
+const eastWhist = rightEdge - 112;
+const eastPool = eastWhist - 68;
+const circleR = 38;
+const circleY = 232;
+const rise = bottomEdge - circleY;
+const run = mid - leftEdge;
+/** The y of the left diagonal at x. */
+const along = (x: number) => circleY + ((mid - x) * rise) / run;
+/** The x of the left diagonal at y. */
+const diagonalX = (y: number) => mid - ((y - circleY) * run) / rise;
+const mountainBase = along(westPool);
+const poolBase = along(westWhist);
+const whistSplit = (topEdge + bottomEdge) / 2;
+/** The space kept between a line of text and the lines of its field. */
+const margin = 8;
+
+/** Where one line of text goes: its center and how long it can be. */
+export type PulkaLane = { x: number; y: number; room: number };
+/** One way to write a field: a line per lane, in reading order, in a font no bigger than size. */
+export type PulkaLaneSet = { lanes: readonly PulkaLane[]; size: number };
+/**
+ * A field of the sheet and the ways to write it, from one line to several. The left
+ * player's text is turned to read from the left side, the right player's from the right.
+ */
+export type PulkaField = { turn: "left" | "right" | "none"; sets: readonly PulkaLaneSet[] };
+
+/** A line down the left side at column x, from top to the lowest point its band can reach. */
+function columnLane(
+  x: number,
+  size: number,
+  top: number,
+  floor: (right: number) => number,
+): PulkaLane {
+  const bottom = floor(x + size / 2);
+  return { x, y: (top + bottom) / 2, room: bottom - top - 2 * margin };
+}
+
+/** A line across the bottom at row y, between the sides its band reaches at its top. */
+function rowLane(
+  y: number,
+  size: number,
+  sides: (top: number) => { left: number; right: number },
+  gap = margin,
+): PulkaLane {
+  const { left, right } = sides(y - size / 2);
+  return { x: (left + right) / 2, y, room: right - left - 2 * gap };
+}
+
+function columnField(
+  columns: readonly (readonly number[])[],
+  sizes: readonly number[],
+  top: number,
+  floor: (right: number) => number,
+): PulkaField {
+  return {
+    turn: "left",
+    sets: columns.map((xs, index) => {
+      const size = sizes[index] ?? 16;
+      return { size, lanes: xs.map((x) => columnLane(x, size, top, floor)) };
+    }),
+  };
+}
+
+function rowField(
+  rows: readonly (readonly number[])[],
+  sizes: readonly number[],
+  sides: (top: number) => { left: number; right: number },
+  gap = margin,
+): PulkaField {
+  return {
+    turn: "none",
+    sets: rows.map((ys, index) => {
+      const size = sizes[index] ?? 16;
+      return { size, lanes: ys.map((y) => rowLane(y, size, sides, gap)) };
+    }),
+  };
+}
+
+/** The right player's field: the left player's, mirrored. */
+function mirrored(field: PulkaField): PulkaField {
+  return {
+    turn: "right",
+    sets: field.sets.map((set) => ({
+      size: set.size,
+      lanes: set.lanes.map((lane) => ({ ...lane, x: mid * 2 - lane.x })),
+    })),
+  };
+}
+
+/** The highest y the circle leaves free in a band left of the middle line ending at right. */
+const aboveCircle = (right: number): number => {
+  const dx = mid - right;
+  return dx >= circleR ? Infinity : circleY - Math.sqrt(circleR ** 2 - dx ** 2);
+};
+const mountainFloor = (right: number) => Math.min(along(right), aboveCircle(right));
+const between = (top: number) => ({ left: diagonalX(top), right: mid * 2 - diagonalX(top) });
+const westOfMiddle = (top: number) => ({ left: diagonalX(top), right: mid });
+const eastOfMiddle = (top: number) => ({ left: mid, right: mid * 2 - diagonalX(top) });
+
+const nameSize = 16;
+// Each player's name and standing go in a lane of the гора nearest to the player, so they
+// never share a line with the гора's entries. The left player's text reads from the left,
+// so its first line is the one nearest the middle.
+const sideName = columnField([[226]], [nameSize], topEdge, mountainFloor);
+const sideMountain = columnField(
+  [[262], [284, 258], [298, 274, 250]],
+  [16, 16, 15],
+  topEdge,
+  mountainFloor,
+);
+const sideBullet = columnField(
+  [[174], [185, 163], [192, 174, 156]],
+  [16, 15, 13],
+  topEdge,
+  along,
+);
+const whistColumns = [[84], [96, 72], [106, 84, 62]];
+const sideWhistUpper = columnField(whistColumns, [16, 16, 15], topEdge, () => whistSplit);
+const sideWhistLower = columnField(whistColumns, [16, 16, 15], whistSplit, (right) =>
+  Math.min(bottomEdge, along(right)),
+);
+
+/** Every field of the sheet, for the left player, the right player and the viewer. */
+export const pulkaFields = {
+  left: {
+    name: sideName,
+    mountain: sideMountain,
+    bullet: sideBullet,
+    whistUpper: sideWhistUpper,
+    whistLower: sideWhistLower,
+  },
+  right: {
+    name: mirrored(sideName),
+    mountain: mirrored(sideMountain),
+    bullet: mirrored(sideBullet),
+    whistUpper: mirrored(sideWhistUpper),
+    whistLower: mirrored(sideWhistLower),
+  },
+  viewer: {
+    name: rowField([[367]], [nameSize], between),
+    // The viewer's гора is the smallest field, so its lines come closer to the diagonals
+    // and a long chain gets a fourth line before its font goes below minPulkaSize.
+    mountain: rowField(
+      [[342], [326, 344], [306, 322, 338], [312, 325, 338, 351]],
+      [16, 14, 12, 12],
+      between,
+      5,
+    ),
+    bullet: rowField([[422], [410, 434], [400, 422, 444]], [16, 16, 15], between),
+    whistWest: rowField([[552], [536, 560], [524, 548, 572]], [16, 16, 15], westOfMiddle),
+    whistEast: rowField([[552], [536, 560], [524, 548, 572]], [16, 16, 15], eastOfMiddle),
+  },
+} as const;
+
+/** The sheet's ruled lines, for drawing and for checking that no text crosses them. */
+export const pulkaLines: readonly (readonly [number, number, number, number])[] = [
+  [leftEdge, topEdge, rightEdge, topEdge],
+  [rightEdge, topEdge, rightEdge, bottomEdge],
+  [rightEdge, bottomEdge, leftEdge, bottomEdge],
+  [leftEdge, bottomEdge, leftEdge, topEdge],
+  [westWhist, topEdge, westWhist, poolBase],
+  [westPool, topEdge, westPool, mountainBase],
+  [eastPool, topEdge, eastPool, mountainBase],
+  [eastWhist, topEdge, eastWhist, poolBase],
+  [mid, topEdge, mid, circleY - circleR],
+  [mid, poolBase, mid, bottomEdge],
+  [leftEdge, whistSplit, westWhist, whistSplit],
+  [eastWhist, whistSplit, rightEdge, whistSplit],
+  [westPool, mountainBase, eastPool, mountainBase],
+  [westWhist, poolBase, eastWhist, poolBase],
+  [mid, circleY, leftEdge, bottomEdge],
+  [mid, circleY, rightEdge, bottomEdge],
+];
+
+/** The circle in the middle with the length of the пуля. */
+export const pulkaCircle = { x: mid, y: circleY, r: circleR } as const;
+
 export function BulletSheet({
   score,
   settlement,
@@ -155,9 +341,6 @@ export function BulletSheet({
 
   const left = (viewer + 1) % 3;
   const right = (viewer + 2) % 3;
-  const leftName = playerName(left, viewer, names);
-  const rightName = playerName(right, viewer, names);
-  const viewerName = playerName(viewer, viewer, names);
   // The last deal's entries are written in another color, so they stand out from the
   // earlier ones. score.last is what the last scored deal (or the current deal's прикуп)
   // changed, the same record the «(+N)» beside each name uses.
@@ -185,60 +368,11 @@ export function BulletSheet({
       false,
       (score.last?.whists[from]?.[to] ?? 0) !== 0,
     );
-  const standing = (seat: number) =>
-    standingParts(now[seat] ?? 0, (now[seat] ?? 0) - (then[seat] ?? 0));
-
-  const leftEdge = 28;
-  const rightEdge = 612;
-  const topEdge = 28;
-  const bottomEdge = 612;
-  const mid = 320;
-  const whistW = 112;
-  const poolW = 68;
-  const westWhist = leftEdge + whistW;
-  const westPool = westWhist + poolW;
-  const eastWhist = rightEdge - whistW;
-  const eastPool = eastWhist - poolW;
-  const circleR = 38;
-  const circleY = 232;
-  const apexY = circleY;
-  const rise = bottomEdge - apexY;
-  const run = mid - leftEdge;
-  const along = (x: number) => apexY + ((mid - x) * rise) / run;
-  const diagonalX = (y: number) => mid - ((y - apexY) * run) / rise;
-  const mountainBase = along(westPool);
-  const poolBase = along(westWhist);
-  const whistSplit = (topEdge + bottomEdge) / 2;
-  const westMountainX = (westPool + (mid - circleR)) / 2;
-  const eastMountainX = mid * 2 - westMountainX;
-  const westBulletX = (westWhist + westPool) / 2;
-  const eastBulletX = mid * 2 - westBulletX;
-  const westWhistX = (leftEdge + westWhist) / 2;
-  const eastWhistX = mid * 2 - westWhistX;
-  const viewerWhistY = (poolBase + bottomEdge) / 2 + 18;
-  const viewerWhistWest = (diagonalX(viewerWhistY) + mid) / 2;
-  const viewerWhistEast = mid * 2 - viewerWhistWest;
-  const verticalRoom = (center: number, top: number, bottom: number): number => {
-    const half = Math.min(center - top, bottom - center) - 10;
-    return Math.max(36, half * 2);
-  };
-  const horizontalRoom = (y: number): number =>
-    Math.max(36, (mid - diagonalX(y)) * 2 - 28);
-  const sideBulletRoom = verticalRoom(210, topEdge, mountainBase);
-  const sideMountainRoom = verticalRoom(118, topEdge, circleY - 16);
-  const sideWhistUpperRoom = verticalRoom(
-    (topEdge + whistSplit) / 2,
-    topEdge,
-    whistSplit,
-  );
-  const sideWhistLowerRoom = verticalRoom(
-    (whistSplit + bottomEdge) / 2,
-    whistSplit,
-    bottomEdge,
-  );
-  const viewerMountainRoom = horizontalRoom(368);
-  const viewerBulletRoom = horizontalRoom((mountainBase + poolBase) / 2);
-  const viewerWhistRoom = Math.max(36, horizontalRoom(viewerWhistY) * 0.42);
+  const label = (seat: number) => ({
+    name: playerName(seat, viewer, names),
+    ...standingParts(now[seat] ?? 0, (now[seat] ?? 0) - (then[seat] ?? 0)),
+  });
+  const fields = pulkaFields;
 
   return (
     <article className="bullet-paper">
@@ -287,149 +421,29 @@ export function BulletSheet({
           fill="url(#pulka-block)"
         />
         <g className="pulka-ink">
-          <rect
-            x={leftEdge}
-            y={topEdge}
-            width={rightEdge - leftEdge}
-            height={bottomEdge - topEdge}
-          />
-          <line x1={westWhist} y1={topEdge} x2={westWhist} y2={poolBase} />
-          <line x1={westPool} y1={topEdge} x2={westPool} y2={mountainBase} />
-          <line x1={eastPool} y1={topEdge} x2={eastPool} y2={mountainBase} />
-          <line x1={eastWhist} y1={topEdge} x2={eastWhist} y2={poolBase} />
-          <line x1={mid} y1={topEdge} x2={mid} y2={circleY - circleR} />
-          <line x1={mid} y1={poolBase} x2={mid} y2={bottomEdge} />
-          <line x1={leftEdge} y1={whistSplit} x2={westWhist} y2={whistSplit} />
-          <line x1={eastWhist} y1={whistSplit} x2={rightEdge} y2={whistSplit} />
-          <line x1={westPool} y1={mountainBase} x2={eastPool} y2={mountainBase} />
-          <line x1={westWhist} y1={poolBase} x2={eastWhist} y2={poolBase} />
-          <line x1={mid} y1={apexY} x2={leftEdge} y2={bottomEdge} />
-          <line x1={mid} y1={apexY} x2={rightEdge} y2={bottomEdge} />
+          {pulkaLines.map(([x1, y1, x2, y2]) => (
+            <line key={`${x1},${y1},${x2},${y2}`} x1={x1} y1={y1} x2={x2} y2={y2} />
+          ))}
         </g>
         <circle cx={mid} cy={circleY} r={circleR} className="pulka-seal" />
         <text x={mid} y={circleY} className="pulka-pact pulka-center">
           до {bulletTarget}
         </text>
-        <PulkaEntry
-          x={westMountainX}
-          y={circleY}
-          turn="left"
-          kind="name"
-          main={leftName}
-          {...standing(left)}
-        />
-        <PulkaEntry
-          x={westMountainX}
-          y={118}
-          turn="left"
-          kind="figure"
-          {...mountain(left)}
-          fit={sideMountainRoom}
-        />
-        <PulkaEntry
-          x={westBulletX}
-          y={210}
-          turn="left"
-          kind="figure"
-          {...bullet(left)}
-          fit={sideBulletRoom}
-        />
-        <PulkaEntry
-          x={westWhistX}
-          y={(topEdge + whistSplit) / 2}
-          turn="left"
-          kind="figure"
-          {...whist(left, right)}
-          fit={sideWhistUpperRoom}
-        />
-        <PulkaEntry
-          x={westWhistX}
-          y={(whistSplit + bottomEdge) / 2}
-          turn="left"
-          kind="figure"
-          {...whist(left, viewer)}
-          fit={sideWhistLowerRoom}
-        />
-        <PulkaEntry
-          x={eastMountainX}
-          y={circleY}
-          turn="right"
-          kind="name"
-          main={rightName}
-          {...standing(right)}
-        />
-        <PulkaEntry
-          x={eastMountainX}
-          y={118}
-          turn="right"
-          kind="figure"
-          {...mountain(right)}
-          fit={sideMountainRoom}
-        />
-        <PulkaEntry
-          x={eastBulletX}
-          y={210}
-          turn="right"
-          kind="figure"
-          {...bullet(right)}
-          fit={sideBulletRoom}
-        />
-        <PulkaEntry
-          x={eastWhistX}
-          y={(topEdge + whistSplit) / 2}
-          turn="right"
-          kind="figure"
-          {...whist(right, left)}
-          fit={sideWhistUpperRoom}
-        />
-        <PulkaEntry
-          x={eastWhistX}
-          y={(whistSplit + bottomEdge) / 2}
-          turn="right"
-          kind="figure"
-          {...whist(right, viewer)}
-          fit={sideWhistLowerRoom}
-        />
-        <PulkaEntry
-          x={mid}
-          y={334}
-          turn="none"
-          kind="name"
-          main={viewerName}
-          {...standing(viewer)}
-        />
-        <PulkaEntry
-          x={mid}
-          y={368}
-          turn="none"
-          kind="figure"
-          {...mountain(viewer)}
-          fit={viewerMountainRoom}
-        />
-        <PulkaEntry
-          x={mid}
-          y={(mountainBase + poolBase) / 2}
-          turn="none"
-          kind="figure"
-          {...bullet(viewer)}
-          fit={viewerBulletRoom}
-        />
-        <PulkaEntry
-          x={viewerWhistWest}
-          y={viewerWhistY}
-          turn="none"
-          kind="figure"
-          {...whist(viewer, left)}
-          fit={viewerWhistRoom}
-        />
-        <PulkaEntry
-          x={viewerWhistEast}
-          y={viewerWhistY}
-          turn="none"
-          kind="figure"
-          {...whist(viewer, right)}
-          fit={viewerWhistRoom}
-        />
+        <PulkaName field={fields.left.name} {...label(left)} />
+        <PulkaChain field={fields.left.mountain} {...mountain(left)} />
+        <PulkaChain field={fields.left.bullet} {...bullet(left)} />
+        <PulkaChain field={fields.left.whistUpper} {...whist(left, right)} />
+        <PulkaChain field={fields.left.whistLower} {...whist(left, viewer)} />
+        <PulkaName field={fields.right.name} {...label(right)} />
+        <PulkaChain field={fields.right.mountain} {...mountain(right)} />
+        <PulkaChain field={fields.right.bullet} {...bullet(right)} />
+        <PulkaChain field={fields.right.whistUpper} {...whist(right, left)} />
+        <PulkaChain field={fields.right.whistLower} {...whist(right, viewer)} />
+        <PulkaName field={fields.viewer.name} {...label(viewer)} />
+        <PulkaChain field={fields.viewer.mountain} {...mountain(viewer)} />
+        <PulkaChain field={fields.viewer.bullet} {...bullet(viewer)} />
+        <PulkaChain field={fields.viewer.whistWest} {...whist(viewer, left)} />
+        <PulkaChain field={fields.viewer.whistEast} {...whist(viewer, right)} />
       </svg>
       {settlement === null ? null : (
         <p className="bullet-result">
@@ -446,64 +460,184 @@ export function BulletSheet({
   );
 }
 
-export function PulkaEntry({
-  x,
-  y,
-  turn,
-  kind,
-  main,
-  fresh = "",
-  note = null,
-  tone = null,
-  fit,
+function laneTransform(turn: PulkaField["turn"], lane: PulkaLane): string | undefined {
+  return turn === "left"
+    ? `rotate(90 ${lane.x} ${lane.y})`
+    : turn === "right"
+      ? `rotate(-90 ${lane.x} ${lane.y})`
+      : undefined;
+}
+
+/** A player's name with the standing after it, in the first lane of the name field. */
+export function PulkaName({
+  field,
+  name,
+  tone,
+  note,
 }: {
-  x: number;
-  y: number;
-  turn: "left" | "right" | "none";
-  kind: "name" | "figure";
-  main: string;
-  fresh?: string;
-  note?: string | null;
-  tone?: number | null;
-  fit?: number;
+  field: PulkaField;
+  name: string;
+  tone: number | null;
+  note: string | null;
 }): React.JSX.Element | null {
-  if (main === "" && fresh === "" && tone === null && note === null) {
+  const lane = field.sets[0]?.lanes[0];
+  if (lane === undefined) {
     return null;
   }
-  const transform =
-    turn === "left"
-      ? `rotate(90 ${x} ${y})`
-      : turn === "right"
-        ? `rotate(-90 ${x} ${y})`
-        : undefined;
-  const quiet =
-    note === null ? null : (
-      <tspan className="pulka-quiet">
-        {main === "" && tone === null ? note : ` ${note}`}
-      </tspan>
-    );
-  const fontSize =
-    kind === "figure" && fit !== undefined ? fitChain(main + fresh, fit) : undefined;
+  const toneText = tone === null ? "" : ` ${signed(tone)}`;
+  const noteText = note === null ? "" : ` ${note}`;
+  const fitted = fitName(
+    name,
+    labelWidth(toneText, toneSize) + labelWidth(noteText, noteSize),
+    lane.room,
+    field.sets[0]?.size ?? nameSize,
+  );
   return (
     <text
-      x={x}
-      y={y}
-      className={
-        kind === "name" ? "pulka-name pulka-center" : "pulka-figure pulka-center"
-      }
-      fontSize={fontSize}
-      transform={transform}
+      x={lane.x}
+      y={lane.y}
+      className="pulka-name pulka-center"
+      fontSize={fitted.size}
+      transform={laneTransform(field.turn, lane)}
     >
-      {main}
-      {fresh === "" ? null : <tspan className="pulka-fresh">{fresh}</tspan>}
+      {fitted.text === name ? null : <title>{name}</title>}
+      {fitted.text}
       {tone === null ? null : (
-        <tspan className={tone > 0 ? "pulka-plus" : "pulka-minus"}>
-          {` ${signed(tone)}`}
-        </tspan>
+        <tspan className={tone > 0 ? "pulka-plus" : "pulka-minus"}>{toneText}</tspan>
       )}
-      {quiet}
+      {note === null ? null : <tspan className="pulka-quiet">{noteText}</tspan>}
     </text>
   );
+}
+
+/** A chain of entries, on as many lines of its field as it needs to stay readable. */
+export function PulkaChain({
+  field,
+  main,
+  fresh,
+}: {
+  field: PulkaField;
+  main: string;
+  fresh: string;
+}): React.JSX.Element | null {
+  const placed = chainLines(main + fresh, field.sets);
+  if (placed === null) {
+    return null;
+  }
+  return (
+    <g className="pulka-chain">
+      {placed.lines.map((line, index) => {
+        const lane = placed.lanes[index] as PulkaLane;
+        // The last deal's entry is the chain's last token, so it ends the last line.
+        const own =
+          index === placed.lines.length - 1 && fresh !== ""
+            ? line.slice(0, line.length - fresh.length)
+            : line;
+        return (
+          <text
+            key={index}
+            x={lane.x}
+            y={lane.y}
+            className="pulka-figure pulka-center"
+            fontSize={placed.size}
+            transform={laneTransform(field.turn, lane)}
+          >
+            {own}
+            {own === line ? null : <tspan className="pulka-fresh">{fresh}</tspan>}
+          </text>
+        );
+      })}
+    </g>
+  );
+}
+
+// Rough widths of the sheet's bold serif glyphs, in ems. They err on the wide side, so a
+// line that fits by them fits on the screen.
+const figureWidth = 0.72;
+const letterWidth = 0.64;
+const toneSize = 15;
+const noteSize = 12;
+/** The smallest font a name shrinks to before it is cut. */
+export const minPulkaSize = 12;
+/** The smallest font a chain shrinks to before it goes on more lines. */
+export const wrapPulkaSize = 14;
+
+function labelWidth(text: string, size: number): number {
+  return text.length * letterWidth * size;
+}
+
+/**
+ * The name to write before the standing, and its font: the full name if it fits in a font
+ * no smaller than minPulkaSize, else the name cut short with «…» so the standing stays whole.
+ */
+export function fitName(
+  name: string,
+  suffixWidth: number,
+  room: number,
+  size = nameSize,
+): { text: string; size: number } {
+  const free = room - suffixWidth;
+  const fits = Math.floor((free / (name.length * letterWidth)) * 10) / 10;
+  if (fits >= minPulkaSize) {
+    return { text: name, size: Math.min(size, fits) };
+  }
+  const chars = Math.floor(free / (letterWidth * minPulkaSize)) - 1;
+  return { text: `${name.slice(0, Math.max(1, chars)).trimEnd()}…`, size: minPulkaSize };
+}
+
+/**
+ * Splits a chain into lines over the lanes of the first lane set that fits it in a font no
+ * smaller than wrapPulkaSize, so a chain wraps before it gets hard to read. Lines break
+ * after a dot. If no set fits, the chain takes the set where its font comes out biggest.
+ * Null for an empty chain.
+ */
+export function chainLines(
+  text: string,
+  sets: readonly PulkaLaneSet[],
+): { lines: string[]; lanes: readonly PulkaLane[]; size: number } | null {
+  if (text === "") {
+    return null;
+  }
+  const tokens = text.match(/[^.]*\.\s*|[^.]+$/g) ?? [text];
+  let best: { lines: string[]; lanes: readonly PulkaLane[]; size: number } | null = null;
+  for (const set of sets) {
+    if (set.lanes.length > tokens.length) {
+      continue;
+    }
+    const split = bestSplit(tokens, set.lanes);
+    const placed = { ...split, lanes: set.lanes, size: Math.min(set.size, split.size) };
+    if (placed.size >= wrapPulkaSize) {
+      return placed;
+    }
+    if (best === null || placed.size > best.size) {
+      best = placed;
+    }
+  }
+  return best;
+}
+
+/** The split of tokens into one line per lane that allows the biggest font. */
+function bestSplit(
+  tokens: readonly string[],
+  lanes: readonly PulkaLane[],
+): { lines: string[]; size: number } {
+  const lane = lanes[0] as PulkaLane;
+  const sizeOf = (line: string) =>
+    Math.floor((lane.room / (line.length * figureWidth)) * 10) / 10;
+  if (lanes.length === 1) {
+    const line = tokens.join("").trimEnd();
+    return { lines: [line], size: sizeOf(line) };
+  }
+  let best: { lines: string[]; size: number } = { lines: [], size: -Infinity };
+  for (let cut = 1; cut <= tokens.length - (lanes.length - 1); cut++) {
+    const line = tokens.slice(0, cut).join("").trimEnd();
+    const rest = bestSplit(tokens.slice(cut), lanes.slice(1));
+    const size = Math.min(sizeOf(line), rest.size);
+    if (size > best.size) {
+      best = { lines: [line, ...rest.lines], size };
+    }
+  }
+  return best;
 }
 
 export function toBulletScore(score: GameSnapshot["score"]): BulletScore {
@@ -657,15 +791,6 @@ export function chainParts(
   }
   const fresh = closed ? `${plain(current)} >>` : plain(current);
   return { main: text.slice(0, text.length - fresh.length), fresh };
-}
-
-export function fitChain(text: string, room: number): number {
-  const base = 16;
-  const factor = 0.72;
-  if (text.length === 0 || text.length * factor * base <= room) {
-    return base;
-  }
-  return Math.round((room / (text.length * factor)) * 10) / 10;
 }
 
 export function plain(value: number): string {

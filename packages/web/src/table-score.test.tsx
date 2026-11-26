@@ -34,10 +34,17 @@ import {
 import {
   BulletSheet,
   DealSummary,
+  chainLines,
   chainParts,
   dealHeading,
+  fitName,
+  minPulkaSize,
+  pulkaCircle,
+  pulkaFields,
+  pulkaLines,
   unplayedNote,
   whistNotes,
+  type PulkaField,
 } from "./table-score.js";
 import type { GameSnapshot, PlayedDeal } from "./table-types.js";
 
@@ -294,15 +301,27 @@ function sheet(
 /**
  * Every bullet, mountain and whist entry of the sheet in drawing order: the left player's
  * mountain, bullet, whists on the right player and on the viewer, then the same for the
- * right player and for the viewer. The highlighted part is in brackets.
+ * right player and for the viewer. The highlighted part is in brackets. A chain written on
+ * several lines is joined back into one string.
  */
 function entries(markup: string): string[] {
-  return [...markup.matchAll(/<text[^>]*class="pulka-figure[^"]*"[^>]*>(.*?)<\/text>/g)].map(
-    (match) =>
-      (match[1] ?? "")
-        .replace('<tspan class="pulka-fresh">', "[")
-        .replace("</tspan>", "]")
-        .replaceAll("&gt;", ">"),
+  return chainLinesOf(markup).map((lines) =>
+    lines
+      .map((line) => line.text)
+      .join("")
+      .replace('<tspan class="pulka-fresh">', "[")
+      .replace("</tspan>", "]")
+      .replaceAll("&gt;", ">"),
+  );
+}
+
+/** The lines of each chain on the sheet, with their font sizes. */
+function chainLinesOf(markup: string): { text: string; size: number }[][] {
+  return [...markup.matchAll(/<g class="pulka-chain">(.*?)<\/g>/g)].map((chain) =>
+    [...(chain[1] ?? "").matchAll(/<text[^>]*>(.*?)<\/text>/g)].map((line) => ({
+      text: line[1] ?? "",
+      size: Number(line[0].match(/font-size="([0-9.]+)"/)?.[1]),
+    })),
   );
 }
 
@@ -403,10 +422,14 @@ describe("last deal's entries on the bullet sheet", () => {
     const markup = sheet(score, deals, 0, 100);
     const chain = Array.from({ length: 14 }, (_, index) => (index + 1) * 6).join(".");
     expect(entries(markup)).toContain(`${chain}.[90]`);
-    // The chain still shrinks to fit its field, counting the highlighted number.
-    const at = markup.indexOf(`${chain}.<tspan`);
-    const element = markup.slice(markup.lastIndexOf("<text", at), at);
-    expect(Number(element.match(/font-size="([0-9.]+)"/)?.[1])).toBeLessThan(16);
+    // The chain goes on several lines rather than shrinking past reading, and the
+    // highlighted number ends the last line.
+    const lines = chainLinesOf(markup).find((chain) =>
+      chain.some((line) => line.text.includes("90")),
+    );
+    expect(lines?.length).toBeGreaterThan(1);
+    expect(lines?.every((line) => line.size >= minPulkaSize)).toBe(true);
+    expect(lines?.at(-1)?.text).toMatch(/<tspan class="pulka-fresh">90<\/tspan>$/);
   });
 
   test("splits a chain into the earlier entries and the last deal's entry", () => {
@@ -636,5 +659,191 @@ describe("bullet dialog size", () => {
       width: 1000,
       height: 900,
     });
+  });
+});
+
+describe("names and entries on the bullet sheet", () => {
+  type Box = { left: number; right: number; top: number; bottom: number };
+  const box = (left: number, right: number, top: number, bottom: number): Box => ({
+    left,
+    right,
+    top,
+    bottom,
+  });
+  const fields = (["left", "right", "viewer"] as const).flatMap((place) =>
+    Object.entries(pulkaFields[place]).map(([name, field]) => ({
+      name: `${place} ${name}`,
+      field: field as PulkaField,
+    })),
+  );
+  /** The box each lane of a field can fill, in every way the field can be written. */
+  const boxes = (field: PulkaField): Box[][] =>
+    field.sets.map((set) =>
+      set.lanes.map((lane) => {
+        const along = lane.room / 2;
+        const across = set.size / 2;
+        return field.turn === "none"
+          ? box(lane.x - along, lane.x + along, lane.y - across, lane.y + across)
+          : box(lane.x - across, lane.x + across, lane.y - along, lane.y + along);
+      }),
+    );
+  const overlap = (a: Box, b: Box) =>
+    a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+  const crosses = (box: Box, [x1, y1, x2, y2]: readonly number[]) =>
+    Array.from({ length: 2001 }, (_, step) => step / 2000).some((t) => {
+      const x = (x1 ?? 0) + ((x2 ?? 0) - (x1 ?? 0)) * t;
+      const y = (y1 ?? 0) + ((y2 ?? 0) - (y1 ?? 0)) * t;
+      return x > box.left && x < box.right && y > box.top && y < box.bottom;
+    });
+  const inCircle = (box: Box) => {
+    const x = Math.max(box.left, Math.min(pulkaCircle.x, box.right));
+    const y = Math.max(box.top, Math.min(pulkaCircle.y, box.bottom));
+    return Math.hypot(x - pulkaCircle.x, y - pulkaCircle.y) < pulkaCircle.r;
+  };
+
+  test("keeps every line of every field off the ruled lines and the circle", () => {
+    for (const { name, field } of fields) {
+      for (const box of boxes(field).flat()) {
+        expect(box.right - box.left > 0 && box.bottom - box.top > 0, name).toBe(true);
+        expect(pulkaLines.some((line) => crosses(box, line)), name).toBe(false);
+        expect(inCircle(box), name).toBe(false);
+      }
+    }
+  });
+
+  test("gives each name, гора, пуля and вист field its own room", () => {
+    for (const [index, { name, field }] of fields.entries()) {
+      for (const set of boxes(field)) {
+        for (const [at, box] of set.entries()) {
+          expect(set.slice(at + 1).some((other) => overlap(box, other)), name).toBe(false);
+        }
+      }
+      for (const { name: otherName, field: other } of fields.slice(index + 1)) {
+        const clash = boxes(field)
+          .flat()
+          .some((box) => boxes(other).flat().some((otherBox) => overlap(box, otherBox)));
+        expect(clash, `${name} / ${otherName}`).toBe(false);
+      }
+    }
+  });
+
+  test("wraps a long chain after a dot and keeps the last deal's entry at its end", () => {
+    const field = pulkaFields.left.mountain;
+    expect(chainLines("", field.sets)).toBeNull();
+    expect(chainLines("2.4", field.sets)).toMatchObject({ lines: ["2.4"], size: 16 });
+    const chain = Array.from({ length: 20 }, (_, index) => (index + 1) * 12).join(".");
+    const placed = chainLines(chain, field.sets);
+    expect(placed?.lines.length).toBeGreaterThan(1);
+    expect(placed?.lines.join("")).toBe(chain);
+    expect(placed?.lines.slice(0, -1).every((line) => line.endsWith("."))).toBe(true);
+    expect(placed?.lines.at(-1)?.endsWith("240")).toBe(true);
+    expect(placed?.size).toBeGreaterThanOrEqual(minPulkaSize);
+    // A closed пуля keeps «>>» with its last number.
+    const closed = chainLines(
+      "2. 4. 6. 8. 10. 12. 14. 16. 18. 20. 22. 24 >>",
+      pulkaFields.viewer.mountain.sets,
+    );
+    expect(closed?.lines.at(-1)?.endsWith("24 >>")).toBe(true);
+    expect(closed?.lines.every((line) => line === line.trim())).toBe(true);
+  });
+
+  test("shrinks a chain past the smallest font only when no lane set holds it", () => {
+    const chain = Array.from({ length: 60 }, (_, index) => (index + 1) * 100).join(".");
+    const placed = chainLines(chain, pulkaFields.viewer.mountain.sets);
+    expect(placed?.lines.length).toBe(4);
+    expect(placed?.size).toBeLessThan(minPulkaSize);
+    expect(placed?.lines.join("")).toBe(chain);
+  });
+
+  test("gives the viewer's гора a fourth line for a chain of about 60 characters", () => {
+    // A гора chain of whole entries (10.17.24…), as long as it can be without passing length.
+    const chain = (length: number) => {
+      const entries: string[] = [];
+      for (let index = 0; ; index++) {
+        const next = [...entries, String(10 + index * 7)];
+        if (next.join(".").length > length) {
+          return entries.join(".");
+        }
+        entries.push(String(10 + index * 7));
+      }
+    };
+    const sets = pulkaFields.viewer.mountain.sets;
+    expect(chain(40)).toHaveLength(38);
+    expect(chainLines(chain(40), sets)?.size).toBeGreaterThanOrEqual(minPulkaSize);
+    // Three lines no longer hold it at a readable size, so it takes four.
+    const near = chainLines(chain(55), sets);
+    expect(chain(55)).toHaveLength(54);
+    expect(near?.lines).toHaveLength(4);
+    expect(near?.size).toBeGreaterThanOrEqual(minPulkaSize);
+    // Near 60 characters the font is just under 12, not the 7.4 it was on three lines.
+    expect(chain(60)).toHaveLength(58);
+    const long = chainLines(chain(60), sets);
+    expect(long?.lines).toHaveLength(4);
+    expect(long?.lines.join("")).toBe(chain(60));
+    expect(long?.size).toBeGreaterThanOrEqual(11.5);
+  });
+
+  test("shrinks a long name, then cuts it so the standing stays whole", () => {
+    expect(fitName("Анна", 40, 300)).toEqual({ text: "Анна", size: 16 });
+    const shrunk = fitName("Александра Константиновна", 60, 300);
+    expect(shrunk.text).toBe("Александра Константиновна");
+    expect(shrunk.size).toBeLessThan(16);
+    expect(shrunk.size).toBeGreaterThanOrEqual(minPulkaSize);
+    const cut = fitName("Евгения Мирославовна-Длинноимённая", 100, 300);
+    expect(cut.size).toBe(minPulkaSize);
+    expect(cut.text).toMatch(/^Евгения Миросл.*…$/);
+    expect(cut.text.length * 0.64 * minPulkaSize + 100).toBeLessThanOrEqual(300);
+  });
+
+  // The case from the screenshots: long names next to long гора chains, from every seat.
+  test("writes long names and long chains apart from every seat", () => {
+    const longNames = [
+      "Александра Константиновна",
+      "Владислав Святославович",
+      "Евгения Мирославовна-Длинноимённая",
+    ];
+    const steps: ScoredDeal[] = Array.from({ length: 14 }, (_, index) =>
+      index % 3 === 2
+        ? { type: "raspas", tricks: [index % 2 === 0 ? 0 : 3, 3, 4], multiplier: 3 }
+        : {
+            type: "contract",
+            declarer: (index % 3) as Seat,
+            level: 6,
+            tricks: [3, 4, 3],
+            whistlers: [((index + 1) % 3) as Seat, ((index + 2) % 3) as Seat],
+          },
+    );
+    const { score, deals } = scoreDeals(steps, 60);
+    for (const viewer of [0, 1, 2]) {
+      const markup = renderToStaticMarkup(
+        <BulletSheet
+          score={JSON.parse(JSON.stringify(score)) as GameSnapshot["score"]}
+          settlement={null}
+          viewer={viewer}
+          names={longNames}
+          bulletTarget={60}
+          deals={deals}
+        />,
+      );
+      for (const chain of chainLinesOf(markup)) {
+        expect(chain.every((line) => line.size >= minPulkaSize)).toBe(true);
+      }
+      const labels = [
+        ...markup.matchAll(/<text[^>]*class="pulka-name[^"]*"[^>]*>(.*?)<\/text>/g),
+      ];
+      expect(labels).toHaveLength(3);
+      for (const label of labels) {
+        const size = Number(label[0].match(/font-size="([0-9.]+)"/)?.[1]);
+        expect(size).toBeGreaterThanOrEqual(minPulkaSize);
+      }
+      // The longest name is cut, with the whole name in its tooltip, and its standing stays.
+      const cut = labels.find((label) =>
+        label[1]?.includes("<title>Евгения Мирославовна-Длинноимённая</title>"),
+      );
+      if (viewer !== 2) {
+        expect(cut?.[1]).toMatch(/…<tspan class="pulka-(plus|minus)">/);
+      }
+      expect(labels.some((label) => label[1]?.startsWith("вы"))).toBe(true);
+    }
   });
 });

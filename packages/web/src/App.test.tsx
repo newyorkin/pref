@@ -1232,18 +1232,24 @@ describe("table form", () => {
       const element = sheet.slice(sheet.lastIndexOf("<text", at), at);
       return Number(element.match(/font-size="([0-9.]+)"/)?.[1]);
     };
+    // The long chain is written on several lines, each in a readable font.
+    const longLines = [...sheet.matchAll(/<g class="pulka-chain">(.*?)<\/g>/g)]
+      .map((chain) => [
+        ...(chain[1] ?? "").matchAll(/<text[^>]*font-size="([0-9.]+)"[^>]*>(.*?)<\/text>/g),
+      ])
+      .find((lines) => lines.map((line) => line[2]).join("") === longChain);
 
     expect(sheet).toContain("2. 6. 10 &gt;&gt;");
     expect(sheet).not.toContain("2.6.10");
     expect(sheet).toContain(">2.4<");
     expect(sheet).not.toContain(">2.2<");
     expect(sheet).toContain(">4.8<");
-    expect(sheet).toContain(`>${longChain}<`);
+    expect(longLines?.length).toBeGreaterThan(1);
     expect(sheet).not.toContain("(+");
     expect(sheet).not.toContain("(−");
     expect(sheet).toContain("Итог: вы +12, Борис −6, Вера −6");
     expect(fontSize("2.4")).toBe(16);
-    expect(fontSize(longChain)).toBeLessThan(16);
+    expect(longLines?.every((line) => Number(line[1]) >= 12)).toBe(true);
     expect(sheet).not.toContain("overflow");
   });
 
