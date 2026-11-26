@@ -1844,6 +1844,7 @@ section.trick.trick-play {
   font-size: calc(0.5rem * var(--snos-scale));
 }
 
+/* The bottom corner is a .pc-corner too, so the снос's top and left above would pull it up. */
 [data-card-face="russ"] .discard-pile .pc-corner-br {
   top: auto;
   right: calc(0.14rem * var(--snos-scale));
@@ -1862,7 +1863,6 @@ section.trick.trick-play {
 @media (min-width: 641px) {
   .discard-pile {
     --snos-scale: var(--card-scale, 1);
-    --magnific-circle: calc(0.62rem * var(--snos-scale));
   }
 
   .game-top {

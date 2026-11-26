@@ -2194,6 +2194,12 @@ describe("display profile", () => {
     for (const face of ["magnific", "russ"]) {
       expect(css).toContain(`[data-card-face="${face}"] .discard-pile`);
     }
+    // «Русские» keep their bottom corner at the bottom right: it is a .pc-corner too.
+    const russBottom = css.match(
+      /\*\/\n\[data-card-face="russ"\] \.discard-pile \.pc-corner-br \{[^}]*\}/,
+    )?.[0] ?? "";
+    expect(russBottom).toContain("top: auto");
+    expect(russBottom).toContain("left: auto");
     // The faces grow with the cards when the player picks a bigger card size.
     const desktop = css.slice(css.indexOf("@media (min-width: 641px)"));
     expect(rule(".discard-pile", desktop)).toContain("--snos-scale: var(--card-scale, 1)");
