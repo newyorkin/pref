@@ -146,6 +146,12 @@ export function applyGameAction(
     if (action.type !== "auction") {
       return reject(state, "invalidPhase");
     }
+    if (
+      action.action.type === "bid" &&
+      !meetsRaspasFloor(state, action.action.bid)
+    ) {
+      return reject(state, "bidTooLow");
+    }
     const transition = applyAuctionAction(state.auction, seat, action.action);
     if (!transition.accepted) {
       return reject(state, transition.reason);
@@ -504,7 +510,7 @@ function allowedGameActions(state: GameState, seat: Seat): readonly GameAction[]
         if (bid.type === "misere" && state.auction.contractBidders[seat]) {
           return false;
         }
-        return bidRank(bid) > currentRank;
+        return bidRank(bid) > currentRank && meetsRaspasFloor(state, bid);
       }).map((bid) => ({
         type: "auction" as const,
         action: { type: "bid" as const, bid },
@@ -663,6 +669,14 @@ function continueAfterDiscard(
     score,
     talon,
   };
+}
+
+function meetsRaspasFloor(state: GameState, bid: Bid): boolean {
+  return (
+    bid.type !== "contract" ||
+    bid.level >=
+      raspasMinimumOrderLevel(state.settings.raspasExit, state.raspasIndex)
+  );
 }
 
 function orderFloor(state: GameState): Bid | null {

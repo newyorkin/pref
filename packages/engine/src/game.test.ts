@@ -11,6 +11,7 @@ import {
   type GameState,
 } from "./game.js";
 import { createBulletScore } from "./scoring.js";
+import { raspasMinimumOrderLevel } from "./settings.js";
 import { createTrickPlay } from "./tricks.js";
 
 const settings = {
@@ -112,11 +113,15 @@ function orderedContract(
     defense: null,
     play: null,
   };
+  const bidLevel = Math.max(
+    level,
+    raspasMinimumOrderLevel(raspasExit, raspasIndex),
+  ) as 6 | 7 | 8;
   state = act(state, 0, {
     type: "auction",
     action: {
       type: "bid",
-      bid: { type: "contract", level, trump },
+      bid: { type: "contract", level: bidLevel, trump },
     },
   });
   state = act(state, 1, { type: "auction", action: { type: "pass" } });
@@ -143,6 +148,67 @@ describe("complete game state", () => {
     expect(gameView(state, 0).speech.map((line) => line.word)).toContain(
       "вторые распасы (множитель 2)",
     );
+  });
+
+  test("677 hides sixes during the auction after raspas and restores them when the index resets", () => {
+    const exit = { ...settings, raspasExit: "677" } as const;
+    const sixes = (state: GameState) =>
+      gameView(state, 0).allowedActions.filter(
+        (action) =>
+          action.type === "auction" &&
+          action.action.type === "bid" &&
+          action.action.bid.type === "contract" &&
+          action.action.bid.level === 6,
+      );
+    const bid = (level: 6 | 7, trump: Trump = "spades"): GameAction => ({
+      type: "auction",
+      action: { type: "bid", bid: { type: "contract", level, trump } },
+    });
+
+    const before = createGame(exit, 1);
+    expect(sixes(before)).toHaveLength(5);
+    expect(applyGameAction(before, 0, bid(6)).accepted).toBe(true);
+
+    const after = createGame(exit, 1, createBulletScore(), 1);
+    expect(sixes(after)).toEqual([]);
+    expect(gameView(after, 0).allowedActions).toContainEqual(bid(7));
+    expect(gameView(after, 0).allowedActions).toContainEqual({
+      type: "auction",
+      action: { type: "bid", bid: { type: "misere" } },
+    });
+    const rejected = applyGameAction(after, 0, bid(6, "hearts"));
+    expect(rejected.accepted).toBe(false);
+    expect(rejected.reason).toBe("bidTooLow");
+    expect(rejected.state).toBe(after);
+    expect(applyGameAction(after, 0, bid(7)).accepted).toBe(true);
+    expect(sixes(createGame(exit, 1, createBulletScore(), 4))).toEqual([]);
+
+    const reset = createGame(exit, 1, createBulletScore(), 0);
+    expect(sixes(reset)).toHaveLength(5);
+  });
+
+  test("other raspas exits keep their own auction floor", () => {
+    const levels = (exit: GameState["settings"]["raspasExit"], index: number) =>
+      gameView(
+        createGame({ ...settings, raspasExit: exit }, 1, createBulletScore(), index),
+        0,
+      ).allowedActions.flatMap((action) =>
+          action.type === "auction" &&
+          action.action.type === "bid" &&
+          action.action.bid.type === "contract"
+            ? [action.action.bid.level]
+            : [],
+        );
+    expect(levels("666", 5)).toContain(6);
+    expect(levels("788", 0)).toContain(6);
+    expect(levels("788", 1)).not.toContain(6);
+    expect(levels("788", 1)).toContain(7);
+    expect(levels("788", 2)).not.toContain(7);
+    expect(levels("788", 2)).toContain(8);
+    expect(levels("678678", 3)).toContain(6);
+    expect(levels("678678", 4)).not.toContain(6);
+    expect(levels("678678", 5)).not.toContain(7);
+    expect(levels("678678", 5)).toContain(8);
   });
 
   test("the 677 setting requires at least seven to order after raspas", () => {
