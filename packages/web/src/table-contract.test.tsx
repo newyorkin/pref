@@ -169,10 +169,18 @@ describe.each([
     const markup = render(played, viewer);
     // The opponent's name and the trick triangle for an opponent; only the triangle for oneself.
     expect(badges(markup)).toEqual(viewer === declarer ? [badge] : [badge, badge]);
-    const name = viewer === declarer ? "вы" : names[declarer];
     const named = (who: string) =>
       new RegExp(`>${who}(?:</span>)?<span class="contract-badge"`).test(markup);
-    expect(named(name)).toBe(true);
+    // One's own заказ has its own line under «вы» and the trick count, below the triangle's tip.
+    const ownLine =
+      /seat-corner-me[^"]*"><span><span class="seat-corner-name">вы<\/span><\/span><strong>\d+<\/strong><span class="contract-badge"/.test(
+        markup,
+      );
+    expect(ownLine).toBe(viewer === declarer);
+    expect(markup.includes("seat-triangle seat-triangle-own-contract")).toBe(viewer === declarer);
+    if (viewer !== declarer) {
+      expect(named(names[declarer])).toBe(true);
+    }
     expect(markup).not.toContain("Торговля:");
     // A red suit in the badge is coloured like the bids.
     expect(markup.includes('<span class="bid-red">♥</span></span>')).toBe(red);

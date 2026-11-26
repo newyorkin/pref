@@ -1213,6 +1213,20 @@ section.trick.trick-play {
   text-align: center;
 }
 
+/* One's own заказ sits on its own line under the tip; the triangle moves up to make room. */
+.seat-triangle-own-contract {
+  margin-bottom: 1.05rem;
+}
+
+.seat-triangle-own-contract .seat-corner-me {
+  bottom: -0.9rem;
+}
+
+.seat-corner-me > .contract-badge {
+  display: table;
+  margin: 0.1rem auto 0;
+}
+
 .seat-corner-turn {
   color: var(--gold);
 }

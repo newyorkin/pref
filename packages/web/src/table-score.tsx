@@ -34,9 +34,11 @@ export function SeatTriangle({
   } as const;
   const center = { x: 160, y: 92 };
   const arrow = target === null ? null : arrowTo(center, tip[target]);
+  // The tip is too narrow for the заказ beside «вы», so one's own заказ gets a line below the tip.
+  const ownContract = contract?.declarer === viewer;
 
   return (
-    <div className="seat-triangle">
+    <div className={ownContract ? "seat-triangle seat-triangle-own-contract" : "seat-triangle"}>
       <svg viewBox="0 0 320 188" aria-hidden={arrow === null}>
         <polygon points="160,176 22,40 298,40" className="seat-triangle-shape" />
         {arrow === null ? null : (
@@ -64,11 +66,14 @@ export function SeatTriangle({
             <span className="seat-corner-name">
               {playerName(corner.seat, viewer, names)}
             </span>
-            {contract?.declarer === corner.seat ? (
+            {contract?.declarer === corner.seat && corner.place !== "me" ? (
               <ContractBadge bid={contract.bid} />
             ) : null}
           </span>
           <strong>{tricks[corner.seat] ?? 0}</strong>
+          {ownContract && corner.place === "me" && contract !== null ? (
+            <ContractBadge bid={contract.bid} />
+          ) : null}
         </p>
       ))}
     </div>
