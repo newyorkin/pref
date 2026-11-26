@@ -9,6 +9,7 @@ import { ActionPanel } from "./table-actions.js";
 import { AuctionBoard, OrderBoard } from "./table-auction.js";
 import { Opponent, PlayingCard, visibleOpponent } from "./table-cards.js";
 import { Hand } from "./table-hand.js";
+import { RulesDialog } from "./table-rules.js";
 import { BulletDialog, LayoutDialog } from "./table-layout.js";
 import { SeatTriangle, downloadResults, resultsText } from "./table-score.js";
 import { DealLog, SpeechWord, speechEntries, wordsOnStep } from "./table-speech.js";
@@ -302,6 +303,7 @@ export function GameSnapshotPanel({
   const [selected, setSelected] = useState<Card[]>([]);
   const [bulletOpen, setBulletOpen] = useState(false);
   const [layoutOpen, setLayoutOpen] = useState(false);
+  const [rulesOpen, setRulesOpen] = useState(false);
   const [seenSnapshot, setSeenSnapshot] = useState(snapshot);
   const [heldTrick, setHeldTrick] = useState<ReturnType<typeof finishedTrickDisplay>>(null);
   const [leadCard, setLeadCard] = useState<Card | null>(null);
@@ -628,6 +630,13 @@ export function GameSnapshotPanel({
         >
           Открыть пулю
         </button>
+        <button
+          type="button"
+          className="bullet-open"
+          onClick={() => setRulesOpen(true)}
+        >
+          Договорённости
+        </button>
         {state.lastLayout == null ? null : (
           <button
             type="button"
@@ -651,6 +660,9 @@ export function GameSnapshotPanel({
             onClose={() => setBulletOpen(false)}
           />
         </div>
+      ) : null}
+      {rulesOpen ? (
+        <RulesDialog settings={settings} onClose={() => setRulesOpen(false)} />
       ) : null}
       {layoutOpen && !layoutLocked && state.lastLayout != null ? (
         <LayoutDialog

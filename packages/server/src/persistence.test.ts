@@ -82,3 +82,32 @@ test("expires finished and abandoned tables by their separate TTLs", async () =>
     expect(server.getTable("active")).toBeUndefined();
   } finally { await server.close(); }
 });
+
+test("every seat still reads the locked table conventions after the deal and after a restart", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "pref-conventions-"));
+  const databasePath = path.join(dir, "pref.sqlite");
+  let server = createGameServer({ databasePath });
+  await server.listen();
+  try {
+    const table = await lobby(server, "conventions");
+    const agreed = { raspasProgression: "123", raspasExit: "788", throwTalon: true, bulletTarget: 25 };
+    expect((await request(server, `/tables/${table.tableId}`, "PATCH", table.cookies[0], agreed)).ok).toBe(true);
+    for (const cookie of table.cookies.slice(1)) {
+      expect((await request(server, `/tables/${table.tableId}/confirm`, "POST", cookie)).ok).toBe(true);
+    }
+    expect((await request(server, `/tables/${table.tableId}/deal`, "POST", table.cookies[0])).ok).toBe(true);
+    const readAll = async () => {
+      for (const [seat, cookie] of table.cookies.entries()) {
+        expect(await (await request(server, `/tables/${table.tableId}`, "GET", cookie)).json()).toMatchObject({ seat, dealt: true, settings: agreed });
+      }
+    };
+    await readAll();
+    const locked = await request(server, `/tables/${table.tableId}`, "PATCH", table.cookies[0], settings);
+    expect(locked.status).toBe(409);
+    expect(await locked.json()).toEqual({ error: "settingsLocked" });
+    await server.close(); server = createGameServer({ databasePath }); await server.listen();
+    await readAll();
+    expect((await request(server, `/tables/${table.tableId}`, "PATCH", table.cookies[0], settings)).status).toBe(409);
+    await readAll();
+  } finally { await server.close(); await rm(dir, { recursive: true, force: true }); }
+});

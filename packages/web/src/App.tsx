@@ -7,6 +7,7 @@ import {
 
 import { GameTable } from "./GameTable.js";
 import { DisplayProfileProvider, ProfileMenu } from "./profile.js";
+import { EXIT_LABEL, PROGRESSION_LABEL, SettingsSummary } from "./table-rules.js";
 import "./auth.css";
 
 export interface TableSettings {
@@ -28,23 +29,6 @@ interface TableInfo {
   confirmed?: [boolean, boolean, boolean];
   invitePath?: string;
 }
-
-const PROGRESSION_LABEL: Record<
-  TableSettings["raspasProgression"],
-  string
-> = {
-  "111": "1 1 1…",
-  "122": "1 2 2…",
-  "123": "1 2 3 3…",
-  "123123": "1 2 3 1 2 3…",
-};
-
-const EXIT_LABEL: Record<TableSettings["raspasExit"], string> = {
-  "666": "Шестерной",
-  "677": "Семерной",
-  "788": "Семерной, а потом восьмерной",
-  "678678": "7 → 8 → 6 -> 7 ...",
-};
 
 function copyWithField(url: string): boolean {
   const field = document.createElement("textarea");
@@ -570,33 +554,6 @@ function seatName(table: TableInfo, seat: number): string {
     return `Место ${seat + 1}`;
   }
   return "Свободно";
-}
-
-function SettingsSummary({
-  settings,
-}: {
-  settings: TableSettings;
-}): React.JSX.Element {
-  return (
-    <dl className="lobby-settings">
-      <dt>Прогрессия</dt>
-      <dd>{PROGRESSION_LABEL[settings.raspasProgression]}</dd>
-      <dt>Выход</dt>
-      <dd>{EXIT_LABEL[settings.raspasExit]}</dd>
-      <dt>Первый ход</dt>
-      <dd>В тёмную</dd>
-      <dt>Жлобский вист</dt>
-      <dd>Да</dd>
-      <dt>Десятерная</dt>
-      <dd>Проверяется</dd>
-      <dt>Сталинград</dt>
-      <dd>Нет</dd>
-      <dt>Прикуп в лицо</dt>
-      <dd>{settings.throwTalon ? "Можно" : "Нельзя"}</dd>
-      <dt>Длина пули</dt>
-      <dd>{settings.bulletTarget}</dd>
-    </dl>
-  );
 }
 
 function TableLobby({ tableId }: { tableId: string }): React.JSX.Element {

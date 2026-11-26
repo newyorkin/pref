@@ -162,7 +162,7 @@ describe("table form", () => {
     expect(markup).not.toContain("Сдача");
     expect(markup).toContain(">Пас</button>");
     expect(markup).toContain('aria-label="6 ♠"');
-    expect(markup.match(/<button/g)).toHaveLength(3);
+    expect(markup.match(/<button/g)).toHaveLength(4);
     expect(markup.match(/Взятки/g)).toHaveLength(1);
     expect(markup).not.toContain("пока не скажете пас");
     expect(markup).not.toContain("Кнопки заявок");
@@ -248,7 +248,7 @@ describe("table form", () => {
     );
     expect(markup).toContain(">Пас</button>");
     expect(markup).not.toContain('aria-label="6 ♣"');
-    expect(markup.match(/<button/g)).toHaveLength(3);
+    expect(markup.match(/<button/g)).toHaveLength(4);
   });
 
   test("shows whose bid is due instead of a dead auction sheet", () => {

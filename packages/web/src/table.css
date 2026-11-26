@@ -1797,3 +1797,50 @@ section.trick.trick-play {
     font-size: calc(0.78rem * var(--card-scale, 1));
   }
 }
+
+.rules-dialog {
+  position: relative;
+  width: min(26rem, 100%);
+  max-height: calc(100dvh - 2.4rem);
+  overflow: auto;
+  padding: 0.8rem 0.9rem 1rem;
+  border: 1px solid var(--gold);
+  border-radius: 0.4rem;
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+}
+
+.rules-title {
+  margin: 0 0 0.7rem;
+  font-size: 1.05rem;
+}
+
+.rules-dialog .lobby-settings {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.4rem 0.85rem;
+  margin: 0;
+  padding: 0.8rem 0.85rem;
+  border: 1px solid rgba(196, 165, 116, 0.7);
+  border-radius: 0.4rem;
+  background: var(--paper-raised);
+  font-size: 0.92rem;
+}
+
+.rules-dialog .lobby-settings dt {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.rules-dialog .lobby-settings dd {
+  margin: 0;
+  font-weight: 700;
+  text-align: right;
+}
+
+.rules-note {
+  margin: 0.7rem 0 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
