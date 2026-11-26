@@ -3,6 +3,24 @@ import { SUITS, type Card } from "./deck.js";
 import { currentHands, firstLeader } from "./game-state.js";
 import type { GameState } from "./game-types.js";
 
+function misereCatchersOpen(state: GameState): boolean {
+  if (
+    state.phase !== "play" ||
+    state.play === null ||
+    state.auctionResult?.type !== "misere"
+  ) {
+    return false;
+  }
+  const declarer = state.auctionResult.declarer;
+  if (firstLeader(state.dealNumber) !== declarer) {
+    return true;
+  }
+  if (state.play.trickHistory.length > 0) {
+    return true;
+  }
+  return state.play.currentTrick.some((played) => played.seat === declarer);
+}
+
 function misereFacingCards(state: GameState, declarer: Seat): readonly Card[] {
   const discarded =
     state.talon?.declarer === declarer ? state.talon.discarded : [];
@@ -70,7 +88,7 @@ export function shownWhistHands(
     if (facing && declarer !== viewer) {
       hands[declarer] = misereFacingCards(state, declarer);
     }
-    if (state.phase === "play" && state.play !== null) {
+    if (misereCatchersOpen(state) && state.play !== null) {
       for (const seat of [0, 1, 2] as const) {
         if (seat !== declarer && seat !== viewer) {
           hands[seat] = state.play.hands[seat];

@@ -1435,7 +1435,11 @@ describe("complete game state", () => {
     expect(gameView(state, 2).talonCards).toEqual([]);
     expect(gameView(state, 0).discarded).toEqual([...talon]);
     expect(gameView(state, 0).hand).toEqual([...declarer]);
-    expect(gameView(state, 0).shownHands[1]).toBeNull();
+    expect(gameView(state, 0).shownHands).toEqual([null, null, null]);
+    const declarerDuringDiscard = JSON.stringify(gameView(state, 0));
+    for (const hidden of [left[0], left[1], right[0], right[1]]) {
+      expect(declarerDuringDiscard).not.toContain(JSON.stringify(hidden));
+    }
 
     state = act(state, 0, { type: "order", bid: { type: "misere" } });
     expect(state.phase).toBe("order");
@@ -1456,13 +1460,15 @@ describe("complete game state", () => {
     expect(gameView(state, 1).discarded).toEqual([]);
     expect(gameView(state, 1).talonCards).toEqual([]);
     expect(gameView(state, 0).discarded).toEqual([...talon]);
+    expect(gameView(state, 0).shownHands).toEqual([null, null, null]);
+    expect(gameView(state, 1).shownHands[2]).toBeNull();
+    expect(gameView(state, 2).shownHands[1]).toBeNull();
+
+    state = act(state, 0, { type: "playCard", card: card("hearts", 9) });
     expect(gameView(state, 0).shownHands[1]).toEqual([...left]);
     expect(gameView(state, 0).shownHands[2]).toEqual([...right]);
     expect(gameView(state, 1).shownHands[2]).toEqual([...right]);
-    expect(gameView(state, 1).shownHands[1]).toBeNull();
     expect(gameView(state, 2).shownHands[1]).toEqual([...left]);
-
-    state = act(state, 0, { type: "playCard", card: card("hearts", 9) });
     const borrowed = applyGameAction(state, 1, {
       type: "playCard",
       card: card("clubs", 7),
@@ -1489,6 +1495,43 @@ describe("complete game state", () => {
       { type: "playCard", card: card("clubs", 7) },
       { type: "playCard", card: card("diamonds", 7) },
     ]);
+  });
+
+  test("misere opens the catchers at once when somebody else leads", () => {
+    const card = (suit: Suit, rank: Card["rank"]): Card => ({ suit, rank });
+    const talon = [card("spades", 7), card("spades", 8)] as const;
+    const declarer = [card("hearts", 9), card("clubs", 9)] as const;
+    const left = [card("diamonds", 8), card("clubs", 10)] as const;
+    const right = [card("clubs", 7), card("diamonds", 7)] as const;
+    let state: GameState = {
+      settings: { ...settings, bulletTarget: 10 },
+      phase: "auction",
+      seed: 1,
+      dealNumber: 1,
+      raspasIndex: 0,
+      score: createBulletScore(),
+      dealtCards: { hands: [declarer, left, right], talon },
+      auction: createAuction(0),
+      auctionResult: null,
+      talon: null,
+      defense: null,
+      play: null,
+    };
+    state = act(state, 0, {
+      type: "auction",
+      action: { type: "bid", bid: { type: "misere" } },
+    });
+    state = act(state, 1, { type: "auction", action: { type: "pass" } });
+    state = act(state, 2, { type: "auction", action: { type: "pass" } });
+    expect(gameView(state, 0).shownHands).toEqual([null, null, null]);
+    state = act(state, 0, { type: "discard", cards: [...talon] });
+    expect(gameView(state, 0).shownHands).toEqual([null, null, null]);
+    state = confirmOrder(state);
+    expect(state.phase).toBe("play");
+    expect(state.play?.turn).toBe(1);
+    expect(gameView(state, 0).shownHands[1]).toEqual([...left]);
+    expect(gameView(state, 0).shownHands[2]).toEqual([...right]);
+    expect(gameView(state, 1).shownHands[2]).toEqual([...right]);
   });
 
   test("two passes record the ordered game and do not play", () => {
@@ -2250,21 +2293,25 @@ describe("complete game state", () => {
 
     state = act(state, 1, { type: "propose", tricks: 0 });
     expect(currentWords(state)).toEqual({ 1: "отдаём 0?" });
-    expect(gameView(state, 0).shownHands).toEqual([null, [...left], [...right]]);
-    expect(gameView(state, 2).shownHands[0]).toEqual([
-      card("spades", 7),
-      card("spades", 8),
-      card("clubs", 9),
-      card("hearts", 9),
+    expect(gameView(state, 0).shownHands).toEqual([null, null, null]);
+    expect(gameView(state, 2).shownHands).toEqual([
+      [
+        card("spades", 7),
+        card("spades", 8),
+        card("clubs", 9),
+        card("hearts", 9),
+      ],
+      null,
+      null,
     ]);
     expect(gameView(state, 2).discarded).toEqual([]);
     state = act(state, 0, { type: "proposal", answer: "decline" });
 
     state = act(state, 0, { type: "propose", tricks: 0 });
     expect(currentWords(state)).toEqual({ 0: "0 запишем?" });
-    expect(gameView(state, 1).shownHands).toEqual([[...declarer], null, [...right]]);
-    expect(gameView(state, 2).shownHands).toEqual([[...declarer], [...left], null]);
-    expect(gameView(state, 0).shownHands).toEqual([null, [...left], [...right]]);
+    expect(gameView(state, 1).shownHands).toEqual([[...declarer], null, null]);
+    expect(gameView(state, 2).shownHands).toEqual([[...declarer], null, null]);
+    expect(gameView(state, 0).shownHands).toEqual([null, null, null]);
 
     state = act(state, 2, { type: "proposal", answer: "decline" });
     expect(gameView(state, 1).shownHands[0]).toEqual([...declarer]);
