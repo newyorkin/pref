@@ -7,6 +7,8 @@
   --green: #1b4d38;
   --suit-red: #9d3a3a;
   --table-foot: 8.2rem;
+  /* How far one's own заказ below the tip lifts the trick triangle; «Ваш ход» moves up as far. */
+  --own-contract-lift: 1.05rem;
   /* Keep a separate row for the raspas talon above the three seat positions. */
   --trick-h: min(calc(4.8rem * var(--card-scale, 1)), max(2.6rem, calc((100dvh - var(--table-foot) - 18rem) / 4)));
   --trick-w: calc(var(--trick-h) * 0.70833333);
@@ -1216,7 +1218,7 @@ section.trick.trick-play {
 
 /* One's own заказ sits on its own line under the tip; the triangle moves up to make room. */
 .seat-triangle-own-contract {
-  margin-bottom: 1.05rem;
+  margin-bottom: var(--own-contract-lift);
 }
 
 .seat-triangle-own-contract .seat-corner-me {
@@ -1225,7 +1227,7 @@ section.trick.trick-play {
 
 /* «Ваш ход» moves up with the triangle, so it doesn't cover the right corner's name. */
 .game-own-contract .turn-indicator {
-  bottom: calc(var(--table-foot) + 1.55rem);
+  bottom: calc(var(--table-foot) + 0.5rem + var(--own-contract-lift));
 }
 
 .seat-corner > span > .contract-badge {
