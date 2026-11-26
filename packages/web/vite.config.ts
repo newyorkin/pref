@@ -26,7 +26,10 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
     proxy: {
-      "/local-test": "http://127.0.0.1:3001",
+      "/local-test": {
+        target: "http://127.0.0.1:3001",
+        changeOrigin: false,
+      },
       "/register": "http://127.0.0.1:3001",
       "/login": "http://127.0.0.1:3001",
       "/logout": "http://127.0.0.1:3001",
