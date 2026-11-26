@@ -184,8 +184,11 @@ export function applyGameAction(
       ...voiced,
       ...advanceSpeech(voiced),
     };
+    const dealer = dealerSeat(state.dealNumber);
     const aceCount =
-      voiced.settings.throwTalon && auctionResult.type === "contract"
+      voiced.settings.throwTalon &&
+      auctionResult.type === "contract" &&
+      auctionResult.declarer !== dealer
         ? voiced.dealtCards.talon.filter((card) => card.rank === 14).length
         : 0;
     const ace = talonAceWord(aceCount);
@@ -631,7 +634,11 @@ function throwTalonInFace(
 }
 
 function openedTalonScore(state: GameState, result: AuctionResult): BulletScore {
-  if (!state.settings.throwTalon || result.type !== "contract") {
+  if (
+    !state.settings.throwTalon ||
+    result.type !== "contract" ||
+    result.declarer === dealerSeat(state.dealNumber)
+  ) {
     return state.score;
   }
   const scored = scoreOpenTalon(

@@ -790,6 +790,72 @@ describe("complete game state", () => {
     ).toBe(false);
   });
 
+  test("the dealer writes no talon aces on his own contract", () => {
+    const card = (suit: Suit, rank: Card["rank"]): Card => ({ suit, rank });
+    const finish = (
+      talon: Card[],
+      bullet: [number, number, number] = [0, 0, 0],
+    ) => {
+      const score = { ...createBulletScore(), bullet };
+      return act(
+        boughtDeal({
+          dealNumber: 1,
+          score,
+          scoreAtDealStart: score,
+          dealtCards: {
+            hands: [
+              [card("clubs", 10)],
+              [card("hearts", 7)],
+              [card("clubs", 7)],
+            ],
+            talon,
+          },
+        }),
+        2,
+        { type: "auction", action: { type: "pass" } },
+      );
+    };
+
+    expect(
+      finish([card("spades", 13), card("hearts", 12)]).score.bullet,
+    ).toEqual([0, 0, 0]);
+    const one = finish([card("spades", 14), card("hearts", 13)]);
+    expect(one.score.bullet).toEqual([0, 0, 0]);
+    expect(one.score.whists).toEqual(createBulletScore().whists);
+    expect(gameView(one, 0).speech.map((line) => line.word)).not.toContain(
+      "туз в пулю",
+    );
+    const two = finish([card("spades", 14), card("hearts", 14)]);
+    expect(two.score.bullet).toEqual([0, 0, 0]);
+    expect(gameView(two, 0).speech.map((line) => line.word)).not.toContain(
+      "два туза в пулю",
+    );
+    const full = finish([card("spades", 14), card("hearts", 14)], [10, 0, 0]);
+    expect(full.score.bullet).toEqual([10, 0, 0]);
+    expect(full.score.whists[0]).toEqual([0, 0, 0]);
+    expect(full.score.mountain).toEqual([0, 0, 0]);
+
+    const score = { ...createBulletScore(), bullet: [0, 0, 10] as const };
+    const helped = act(
+      boughtDeal({
+        score,
+        scoreAtDealStart: score,
+        dealtCards: {
+          hands: [
+            [card("clubs", 10)],
+            [card("hearts", 7)],
+            [card("clubs", 7)],
+          ],
+          talon: [card("spades", 14), card("hearts", 14)],
+        },
+      }),
+      2,
+      { type: "auction", action: { type: "pass" } },
+    );
+    expect(helped.score.bullet).toEqual([2, 0, 10]);
+    expect(helped.score.whists[2][0]).toBe(20);
+  });
+
   test("talon aces and the contract share the bullet room left at the start of the deal", () => {
     const card = (suit: Suit, rank: Card["rank"]): Card => ({ suit, rank });
     const score = {
@@ -813,9 +879,12 @@ describe("complete game state", () => {
       2,
       { type: "auction", action: { type: "pass" } },
     );
-    expect(state.score.bullet).toEqual([10, 1, 0]);
-    expect(state.score.whists[0][1]).toBe(10);
+    expect(state.score.bullet).toEqual([9, 0, 0]);
+    expect(state.score.whists[0][1]).toBe(0);
     expect(state.score.mountain).toEqual([0, 0, 0]);
+    expect(gameView(state, 0).speech.map((line) => line.word)).not.toContain(
+      "два туза в пулю",
+    );
     expect(
       gameView(state, 0).allowedActions.some(
         (action) => action.type === "throwTalon",
@@ -842,10 +911,10 @@ describe("complete game state", () => {
     state = act(state, 1, { type: "playCard", card: card("hearts", 8) });
     state = act(state, 2, { type: "playCard", card: card("clubs", 8) });
 
-    expect(state.score.bullet).toEqual([10, 3, 0]);
-    expect(state.score.whists[0][1]).toBe(30);
+    expect(state.score.bullet).toEqual([10, 1, 0]);
+    expect(state.score.whists[0][1]).toBe(10);
     expect(state.score.mountain).toEqual([0, 0, 0]);
-    expect(state.score.last.bullet).toEqual([1, 3, 0]);
+    expect(state.score.last.bullet).toEqual([1, 1, 0]);
     expect(state.score.last.mountain).toEqual([0, 0, 0]);
     expect(state.lastLayout?.tricks).toEqual([6, 2, 2]);
   });
