@@ -40,7 +40,7 @@ Implement each remaining item in the "Что проверить и сделат�
    - `pnpm typecheck`
    - `pnpm test`
    - `pnpm --filter @pref/web build`, if you changed `packages/web`
-   - For visible changes, check them in the running app on the local test table: start it with `LOCAL_TEST_MODE=1 HOST=127.0.0.1 pnpm dev`, then open `http://localhost:5173/testing` (see "Тест втроём в одной вкладке" in `README.md`). Use the player switcher to check each player's view. If you have a browser tool, use it and describe what you saw under `### Testing`. If you can't check in a browser, list the visual check under `### Not verified`. Stop the dev server when you're done.
+   - For visible changes, take screenshots of the fix on the local test table with `.claude/tools/screenshot.mjs`. The comment at the top of that file explains how to start the server and write a scenario. Use `pnpm --filter @pref/web build` and the server start command it gives, not `pnpm dev`. Save the screenshots to `/tmp/pref-screenshots/<issue number>/`. Take one for each state the ticket's checklist names, from each player's view where it differs. Look at every screenshot yourself, and describe what each one shows under `### Testing`. If you can't take a screenshot, list the visual check under `### Not verified`, with the reason. Stop the server when you're done.
 2. Commit on the ticket branch.
 3. Push the branch with `git push -u origin <branch>`.
 4. Open a pull request into `main` with `gh pr create`. Don't merge it. Write the PR in English, and put `Closes #<issue number>` at the end of the description so that merging closes the issue.
@@ -51,12 +51,14 @@ Implement each remaining item in the "Что проверить и сделат�
      - `### Choices the ticket doesn't settle`: decisions you made where the ticket or docs were silent
      - `### How to run`
      - `### Testing`: commands run and their results
+     - `### Screenshots`: the screenshots of the fix, each with a one-line caption. Publish them with `.claude/tools/publish-screenshots.sh <issue number> /tmp/pref-screenshots/<issue number>/*.png`, which pushes them to the `pr-screenshots` branch and prints a Markdown image line for each. Paste those lines here. If you retake screenshots after review fixes, publish them again and replace the lines with `gh pr edit`.
      - `### Acceptance criteria`: each item from the "Что проверить и сделать" list as a checkbox, ticked if it passed, or unticked with the reason
      - `### Not verified`: anything you couldn't check, and why
      - `### Docs changed`: each change to `README.md`, `docs/roadmap.md` or other docs, and why
      - `### Docs that may be wrong`: anything in the docs you think is wrong but didn't change
 5. Get the PR reviewed by a new agent. Use the Agent tool with a fresh agent, not a fork, so the reviewer doesn't share your view of the code. Set `model: "opus"` so the review runs on the latest Opus model. Tell it the PR number and issue number, and ask it to:
    - read the issue, `README.md`, `docs/roadmap.md`, the diff (`gh pr diff <number>`) and the code around the changed lines
+   - look at the screenshots in the PR description and check that they show each item in the ticket's checklist working
    - look for bugs, missed acceptance criteria, missing tests, breaks from the existing code's conventions, in-app strings or game terms not in Russian, and work outside the ticket
    - report each issue with its file and line, without changing any files
    - mark each issue as **obvious** (one clear fix within the ticket) or **judgement call** (more than one reasonable fix, behavior the ticket and docs don't settle, work that may belong to another ticket, or a change to `README.md` or `docs/roadmap.md` that isn't clearly needed)
