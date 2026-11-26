@@ -1369,6 +1369,22 @@ section.trick.trick-play {
   flex: 0 0 auto;
 }
 
+/* On a short landscape screen, such as a phone on its side, «Закрыть» stands beside the
+   пуля instead of above it, so the пуля gets the full height. */
+@container (orientation: landscape) and (max-height: 32rem) {
+  .bullet-dialog {
+    --bullet-chrome: 6rem;
+    flex-direction: row-reverse;
+    width: min(100cqw, calc(100cqh + var(--bullet-chrome)));
+    height: min(100cqh, calc(100cqw - var(--bullet-chrome)));
+  }
+
+  .bullet-dialog .bullet-close {
+    align-self: flex-start;
+    margin: 0 0 0 0.7rem;
+  }
+}
+
 .bullet-dialog .deal-log-resize-xy {
   top: 0;
   right: 0;

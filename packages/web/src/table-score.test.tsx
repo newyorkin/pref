@@ -22,6 +22,7 @@ import {
   BULLET_BOX_KEY,
   BulletDialog,
   centeredCornerSize,
+  forgetDialogSize,
   LayoutDialog,
 } from "./table-layout.js";
 import {
@@ -476,6 +477,9 @@ describe("bullet dialog size", () => {
     vi.stubGlobal("localStorage", {
       getItem: (key: string) => stored[key] ?? null,
       setItem: () => undefined,
+      removeItem: (key: string) => {
+        delete stored[key];
+      },
     });
     return renderToStaticMarkup(
       <BulletDialog
@@ -509,6 +513,28 @@ describe("bullet dialog size", () => {
       "pref.bulletDialogBox.v1": JSON.stringify({ width: 640, height: 704 }),
     });
     expect(markup).toContain('<div class="bullet-dialog" role="dialog" aria-label="Пуля">');
+  });
+
+  test("a double-click on the resize corner goes back to the size by the screen", () => {
+    const stored = { [BULLET_BOX_KEY]: JSON.stringify({ width: 500, height: 540 }) };
+    expect(renderWithStorage(stored)).toContain('title="Двойной щелчок — размер по экрану"');
+    // The corner's double-click forgets the saved size, so the next open is automatic.
+    forgetDialogSize(BULLET_BOX_KEY);
+    expect(stored).toEqual({});
+    expect(renderWithStorage(stored)).toContain(
+      '<div class="bullet-dialog" role="dialog" aria-label="Пуля">',
+    );
+  });
+
+  test("puts «Закрыть» beside the пуля on a short landscape screen", () => {
+    const landscape =
+      css.match(/@container \(orientation: landscape\) and \(max-height: 32rem\) \{[\s\S]*?\n\}/)?.[0] ??
+      "";
+    expect(landscape).toMatch(/\.bullet-dialog \{[^}]*flex-direction: row-reverse;/);
+    expect(landscape).toMatch(
+      /\.bullet-dialog \{[^}]*height: min\(100cqh, calc\(100cqw - var\(--bullet-chrome\)\)\);/,
+    );
+    expect(landscape).toMatch(/\.bullet-dialog \.bullet-close \{\s*align-self: flex-start;/);
   });
 
   test("grows the centered dialog by twice the pointer's move", () => {

@@ -423,7 +423,12 @@ export function BulletDialog({
           className="deal-log-resize deal-log-resize-xy"
           role="separator"
           aria-label="Размер пули"
+          title="Двойной щелчок — размер по экрану"
           onPointerDown={startResize}
+          onDoubleClick={() => {
+            forgetDialogSize(BULLET_BOX_KEY);
+            setSize(null);
+          }}
         />
         <button type="button" className="bullet-close" onClick={onClose}>
           Закрыть
@@ -465,6 +470,14 @@ export function centeredCornerSize(
     },
     limits,
   );
+}
+
+/** Drops a dialog's saved size, so it opens at its automatic size again. */
+export function forgetDialogSize(key: string): void {
+  if (typeof localStorage === "undefined") {
+    return;
+  }
+  localStorage.removeItem(key);
 }
 
 export function readDialogSize(key: string): { width: number; height: number } | null {
