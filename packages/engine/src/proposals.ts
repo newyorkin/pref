@@ -14,6 +14,7 @@ import { type ScoredDeal } from "./scoring.js";
 import { advanceSpeech, withSpeech } from "./speech.js";
 
 export const DECLINE_WORD = "не согласен";
+export const CANCEL_WORD = "отменяю";
 
 export function proposalAvailable(state: GameState): boolean {
   const misere = state.auctionResult?.type === "misere";
@@ -127,7 +128,7 @@ export function cancelProposal(state: GameState, seat: Seat): GameTransition {
   }
   return accept({
     ...state,
-    ...withSpeech(state, seat, "отменяю", true),
+    ...withSpeech(state, seat, CANCEL_WORD, true),
     proposal: null,
   });
 }
@@ -170,13 +171,17 @@ export function answerProposal(
   return accept(both ? finishProposal(voiced, dealSource) : voiced);
 }
 
-/** The first card after a refused offer takes the «не согласен» bubble off the table; the log keeps the line. */
-export function clearRefusal(state: GameState): GameState {
+/**
+ * The first card after a refused or cancelled offer takes the «не согласен» or «отменяю» bubble
+ * off the table; the log keeps the line.
+ */
+export function clearClosedOffer(state: GameState): GameState {
   const step = state.speechStep ?? 0;
-  const refused = (state.speech ?? []).some(
-    (line) => line.step === step && line.word === DECLINE_WORD,
+  const closed = (state.speech ?? []).some(
+    (line) =>
+      line.step === step && (line.word === DECLINE_WORD || line.word === CANCEL_WORD),
   );
-  return refused ? { ...state, ...advanceSpeech(state) } : state;
+  return closed ? { ...state, ...advanceSpeech(state) } : state;
 }
 
 export function finishProposal(state: GameState, dealSource?: () => Deal): GameState {

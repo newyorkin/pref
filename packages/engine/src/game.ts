@@ -49,7 +49,7 @@ import {
 import {
   answerProposal,
   cancelProposal,
-  clearRefusal,
+  clearClosedOffer,
   offerProposal,
   proposalOffers,
   proposalReplies,
@@ -425,7 +425,7 @@ export function applyGameAction(
   if (state.auctionResult?.type === "raspas") {
     return accept(continueRaspas(state, transition.state, dealSource));
   }
-  const resumed = clearRefusal(state);
+  const resumed = clearClosedOffer(state);
   if (transition.state.result === null) {
     return accept({ ...resumed, play: transition.state });
   }

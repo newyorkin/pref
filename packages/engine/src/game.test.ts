@@ -2223,8 +2223,23 @@ describe("complete game state", () => {
     expect(
       gameView(state, 0).allowedActions.some((action) => action.type === "playCard"),
     ).toBe(true);
+    for (const seat of [0, 1, 2] as const) {
+      const view = gameView(state, seat);
+      expect(
+        view.speech.filter((line) => line.step === view.speechStep && line.seat !== null),
+      ).toEqual([expect.objectContaining({ seat: 0, word: "отменяю" })]);
+    }
+
+    // The next card takes «отменяю» off the table for everyone; the log keeps it.
     state = act(state, 0, { type: "playCard", card: card("spades", 14) });
     expect(state.play?.currentTrick).toHaveLength(1);
+    for (const seat of [0, 1, 2] as const) {
+      const view = gameView(state, seat);
+      expect(
+        view.speech.filter((line) => line.step === view.speechStep && line.seat !== null),
+      ).toEqual([]);
+      expect(view.speech.filter((line) => line.word === "отменяю")).toHaveLength(3);
+    }
   });
 
   test("cancelling after the last answer is too late", () => {
