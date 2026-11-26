@@ -130,11 +130,12 @@ describe.each([
   },
 ] as const)("the заказ $name", ({ bid, order, badge, red }) => {
   const pick = choose(bid, order);
-  const ordering = playUntil(
+  const discarding = playUntil(
     createGame(settings, deal(42)),
-    (s) => s.phase === "order",
+    (s) => s.phase === "discard",
     pick,
   );
+  const ordering = playUntil(discarding, (s) => s.phase === "order", pick);
   const result = ordering.auctionResult;
   const declarer = result === null || result.type === "raspas" ? null : result.declarer;
   if (declarer === null) {
@@ -146,8 +147,16 @@ describe.each([
     pick,
   );
 
-  test.each(seats)("seat %i sees the торговля bid as торговля, not as the заказ", (viewer) => {
-    const markup = render(ordering, viewer);
+  test.each(
+    seats.flatMap((viewer) => [
+      { step: "снос", viewer },
+      { step: "заказ", viewer },
+    ]),
+  )("at the $step step seat $viewer sees the торговля bid as торговля, not as the заказ", ({
+    step,
+    viewer,
+  }) => {
+    const markup = render(step === "снос" ? discarding : ordering, viewer);
     expect(badges(markup)).toEqual([]);
     expect(markup).not.toContain('class="game-title"');
     expect(markup).toContain('class="game-bid">Торговля: ');
@@ -161,12 +170,14 @@ describe.each([
     // The opponent's name and the trick triangle for an opponent; only the triangle for oneself.
     expect(badges(markup)).toEqual(viewer === declarer ? [badge] : [badge, badge]);
     const name = viewer === declarer ? "вы" : names[declarer];
-    expect(markup).toContain(`${name}<span class="contract-badge" title="Заказ: ${badge}">`);
+    const named = (who: string) =>
+      new RegExp(`>${who}(?:</span>)?<span class="contract-badge"`).test(markup);
+    expect(named(name)).toBe(true);
     expect(markup).not.toContain("Торговля:");
     // A red suit in the badge is coloured like the bids.
     expect(markup.includes('<span class="bid-red">♥</span></span>')).toBe(red);
     for (const other of seats.filter((seat) => seat !== declarer && seat !== viewer)) {
-      expect(markup).not.toContain(`${names[other]}<span class="contract-badge"`);
+      expect(named(names[other])).toBe(false);
     }
   });
 

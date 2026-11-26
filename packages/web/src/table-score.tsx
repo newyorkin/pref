@@ -61,7 +61,9 @@ export function SeatTriangle({
           }
         >
           <span>
-            {playerName(corner.seat, viewer, names)}
+            <span className="seat-corner-name">
+              {playerName(corner.seat, viewer, names)}
+            </span>
             {contract?.declarer === corner.seat ? (
               <ContractBadge bid={contract.bid} />
             ) : null}

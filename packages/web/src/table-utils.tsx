@@ -196,12 +196,7 @@ export function gameTitle(
     typeof caption === "string" ? (
       caption
     ) : (
-      <>
-        {caption.level}{" "}
-        <span className={isRedSuit(caption.trump) ? "bid-red" : undefined}>
-          {suitSymbol(caption.trump)}
-        </span>
-      </>
+      <ContractFace level={caption.level} trump={caption.trump} />
     );
   return (
     <header className="game-top">
@@ -254,6 +249,22 @@ export function finalContract(
   return typeof declarer === "number" && bid !== null ? { declarer, bid } : null;
 }
 
+/** A contract's level and suit, with ♦ and ♥ in red. */
+export function ContractFace({
+  level,
+  trump,
+}: {
+  level: number;
+  trump: string;
+}): React.JSX.Element {
+  return (
+    <>
+      {level}{" "}
+      <span className={isRedSuit(trump) ? "bid-red" : undefined}>{suitSymbol(trump)}</span>
+    </>
+  );
+}
+
 export function ContractBadge({ bid }: { bid: AuctionBid }): React.JSX.Element | null {
   const caption = bidCaption(bid);
   if (caption === null) {
@@ -262,12 +273,7 @@ export function ContractBadge({ bid }: { bid: AuctionBid }): React.JSX.Element |
   return (
     <span className="contract-badge" title={`Заказ: ${caption}`}>
       {bid.type === "contract" && bid.level !== undefined && bid.trump !== undefined ? (
-        <>
-          {bid.level}{" "}
-          <span className={isRedSuit(bid.trump) ? "bid-red" : undefined}>
-            {suitSymbol(bid.trump)}
-          </span>
-        </>
+        <ContractFace level={bid.level} trump={bid.trump} />
       ) : (
         caption
       )}

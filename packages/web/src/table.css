@@ -106,6 +106,7 @@ body:has(.game-screen) {
 
 .contract-badge {
   display: inline-block;
+  flex-shrink: 0;
   margin-left: 0.4rem;
   padding: 0 0.4rem;
   border-radius: 0.4rem;
@@ -1167,7 +1168,21 @@ section.trick.trick-play {
 }
 
 .seat-corner > span {
-  display: block;
+  display: flex;
+  align-items: baseline;
+}
+
+.seat-corner-right > span {
+  justify-content: flex-end;
+}
+
+.seat-corner-me > span {
+  justify-content: center;
+}
+
+/* Only the name is cut short; the заказ next to it always shows in full. */
+.seat-corner-name {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
