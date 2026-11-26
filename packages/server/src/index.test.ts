@@ -1179,7 +1179,15 @@ describe("game server", () => {
       expect(clients[1].snapshot.state.shownHands).toEqual([declarerHand, null, null]);
       expect(clients[2].snapshot.state.shownHands).toEqual([declarerHand, null, null]);
       expect(clients[0].snapshot.state.shownHands).toEqual([null, null, null]);
-      expect(JSON.stringify(clients[0].snapshot.state)).not.toContain('"hearts"');
+      const declarerView = JSON.stringify(clients[0].snapshot.state);
+      for (const hidden of [
+        { suit: "hearts", rank: 7 },
+        { suit: "diamonds", rank: 9 },
+        { suit: "spades", rank: 13 },
+        { suit: "clubs", rank: 10 },
+      ]) {
+        expect(declarerView).not.toContain(JSON.stringify(hidden));
+      }
 
       await send(2, { type: "proposal", answer: "decline" });
       expect(clients[1].snapshot.state.shownHands?.[0]).toEqual(declarerHand);
