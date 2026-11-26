@@ -750,9 +750,29 @@ describe("names and entries on the bullet sheet", () => {
   test("shrinks a chain past the smallest font only when no lane set holds it", () => {
     const chain = Array.from({ length: 60 }, (_, index) => (index + 1) * 100).join(".");
     const placed = chainLines(chain, pulkaFields.viewer.mountain.sets);
-    expect(placed?.lines.length).toBe(3);
+    expect(placed?.lines.length).toBe(4);
     expect(placed?.size).toBeLessThan(minPulkaSize);
     expect(placed?.lines.join("")).toBe(chain);
+  });
+
+  test("gives the viewer's гора a fourth line for a chain of about 60 characters", () => {
+    const chain = (length: number) =>
+      Array.from({ length: 30 }, (_, index) => String(10 + index * 7))
+        .join(".")
+        .slice(0, length)
+        .replace(/\.$/, "");
+    const sets = pulkaFields.viewer.mountain.sets;
+    // Three lines no longer hold it at a readable size, so it takes four.
+    expect(chainLines(chain(40), sets)?.size).toBeGreaterThanOrEqual(minPulkaSize);
+    const near = chainLines(chain(55), sets);
+    expect(near?.lines).toHaveLength(4);
+    expect(near?.size).toBeGreaterThanOrEqual(minPulkaSize);
+    // At 60 characters the lines break between numbers, so the font is just under 12,
+    // not the 7.4 it was on three lines.
+    const long = chainLines(chain(60), sets);
+    expect(long?.lines).toHaveLength(4);
+    expect(long?.lines.join("")).toBe(chain(60));
+    expect(long?.size).toBeGreaterThan(11);
   });
 
   test("shrinks a long name, then cuts it so the standing stays whole", () => {

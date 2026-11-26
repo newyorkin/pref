@@ -184,9 +184,10 @@ function rowLane(
   y: number,
   size: number,
   sides: (top: number) => { left: number; right: number },
+  gap = margin,
 ): PulkaLane {
   const { left, right } = sides(y - size / 2);
-  return { x: (left + right) / 2, y, room: right - left - 2 * margin };
+  return { x: (left + right) / 2, y, room: right - left - 2 * gap };
 }
 
 function columnField(
@@ -208,12 +209,13 @@ function rowField(
   rows: readonly (readonly number[])[],
   sizes: readonly number[],
   sides: (top: number) => { left: number; right: number },
+  gap = margin,
 ): PulkaField {
   return {
     turn: "none",
     sets: rows.map((ys, index) => {
       const size = sizes[index] ?? 16;
-      return { size, lanes: ys.map((y) => rowLane(y, size, sides)) };
+      return { size, lanes: ys.map((y) => rowLane(y, size, sides, gap)) };
     }),
   };
 }
@@ -279,8 +281,15 @@ export const pulkaFields = {
     whistLower: mirrored(sideWhistLower),
   },
   viewer: {
-    name: rowField([[366]], [nameSize], between),
-    mountain: rowField([[342], [326, 344], [306, 322, 338]], [16, 14, 12], between),
+    name: rowField([[367]], [nameSize], between),
+    // The viewer's гора is the smallest field, so its lines come closer to the diagonals
+    // and a long chain gets a fourth line before its font goes below minPulkaSize.
+    mountain: rowField(
+      [[342], [326, 344], [306, 322, 338], [312, 325, 338, 351]],
+      [16, 14, 12, 12],
+      between,
+      5,
+    ),
     bullet: rowField([[422], [410, 434], [400, 422, 444]], [16, 16, 15], between),
     whistWest: rowField([[552], [536, 560], [524, 548, 572]], [16, 16, 15], westOfMiddle),
     whistEast: rowField([[552], [536, 560], [524, 548, 572]], [16, 16, 15], eastOfMiddle),
