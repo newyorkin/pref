@@ -6,6 +6,9 @@ import {
   deal,
   gameView,
   scoreDeal,
+  scoreOpenTalon,
+  scoreSince,
+  scoreTalonThrow,
   type BulletScore,
   type GameAction,
   type GameState,
@@ -325,6 +328,48 @@ describe("last deal's entries on the bullet sheet", () => {
       const { score, deals } = scoreDeals(steps.slice(0, index + 1));
       expect(entries(sheet(score, deals))).toEqual(wanted);
     }
+  });
+
+  test("highlights help written off the гора when the other пули are full", () => {
+    const noWhist = (declarer: Seat, level: 6 | 10 = 6): ScoredDeal => ({
+      type: "contract",
+      declarer,
+      level,
+      tricks: [0, 0, 0],
+      whistlers: [],
+    });
+    const steps: ScoredDeal[] = [
+      { type: "misere", declarer: 0, tricks: [1, 4, 5] },
+      noWhist(1),
+      noWhist(1),
+      noWhist(2),
+      noWhist(2),
+      noWhist(0),
+      noWhist(0),
+      // All three пули are full: the viewer's own гора goes down.
+      noWhist(0),
+      // More than the гора holds: it goes to 0 and the others get the overflow in their гора, as the engine scores it.
+      noWhist(0, 10),
+    ];
+    const at = (count: number) => {
+      const { score, deals } = scoreDeals(steps.slice(0, count), 4);
+      return entries(sheet(score, deals, 0, 4));
+    };
+    expect(at(8)).toEqual(["2. 4 >>", "2. 4 >>", "10.[8]", "2. 4 >>"]);
+    expect(at(9)).toEqual(["[10]", "2. 4 >>", "[10]", "2. 4 >>", "10.8.[0]", "2. 4 >>"]);
+  });
+
+  test("highlights the прикуп's entries as soon as the next deal writes them", () => {
+    const { score, deals } = scoreDeals([
+      { type: "contract", declarer: 1, level: 6, tricks: [0, 0, 0], whistlers: [] },
+    ]);
+    expect(entries(sheet(score, deals))).toEqual(["[2]"]);
+    // Aces in the прикуп of the next deal go into the dealer's пуля right away.
+    const aces = scoreSince(score, scoreOpenTalon(score, 2, [{ rank: 14 }, { rank: 7 }], 10));
+    expect(entries(sheet(aces, deals))).toEqual(["2", "[1]"]);
+    // «Прикуп в лицо» writes two into the dealer's гора.
+    const thrown = scoreSince(score, scoreTalonThrow(score, 2));
+    expect(entries(sheet(thrown, deals))).toEqual(["2", "[2]"]);
   });
 
   test("highlights the same entries from every seat's view", () => {
