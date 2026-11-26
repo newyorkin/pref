@@ -756,23 +756,31 @@ describe("names and entries on the bullet sheet", () => {
   });
 
   test("gives the viewer's гора a fourth line for a chain of about 60 characters", () => {
-    const chain = (length: number) =>
-      Array.from({ length: 30 }, (_, index) => String(10 + index * 7))
-        .join(".")
-        .slice(0, length)
-        .replace(/\.$/, "");
+    // A гора chain of whole entries (10.17.24…), as long as it can be without passing length.
+    const chain = (length: number) => {
+      const entries: string[] = [];
+      for (let index = 0; ; index++) {
+        const next = [...entries, String(10 + index * 7)];
+        if (next.join(".").length > length) {
+          return entries.join(".");
+        }
+        entries.push(String(10 + index * 7));
+      }
+    };
     const sets = pulkaFields.viewer.mountain.sets;
-    // Three lines no longer hold it at a readable size, so it takes four.
+    expect(chain(40)).toHaveLength(38);
     expect(chainLines(chain(40), sets)?.size).toBeGreaterThanOrEqual(minPulkaSize);
+    // Three lines no longer hold it at a readable size, so it takes four.
     const near = chainLines(chain(55), sets);
+    expect(chain(55)).toHaveLength(54);
     expect(near?.lines).toHaveLength(4);
     expect(near?.size).toBeGreaterThanOrEqual(minPulkaSize);
-    // At 60 characters the lines break between numbers, so the font is just under 12,
-    // not the 7.4 it was on three lines.
+    // Near 60 characters the font is just under 12, not the 7.4 it was on three lines.
+    expect(chain(60)).toHaveLength(58);
     const long = chainLines(chain(60), sets);
     expect(long?.lines).toHaveLength(4);
     expect(long?.lines.join("")).toBe(chain(60));
-    expect(long?.size).toBeGreaterThan(11);
+    expect(long?.size).toBeGreaterThanOrEqual(11.5);
   });
 
   test("shrinks a long name, then cuts it so the standing stays whole", () => {
