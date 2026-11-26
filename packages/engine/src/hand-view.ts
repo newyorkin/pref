@@ -1,7 +1,34 @@
 import { type Seat, type Trump } from "./auction.js";
-import { type Card } from "./deck.js";
+import { SUITS, type Card } from "./deck.js";
 import { currentHands, firstLeader } from "./game-state.js";
 import type { GameState } from "./game-types.js";
+
+function misereCatchersOpen(state: GameState): boolean {
+  if (
+    state.phase !== "play" ||
+    state.play === null ||
+    state.auctionResult?.type !== "misere"
+  ) {
+    return false;
+  }
+  const declarer = state.auctionResult.declarer;
+  if (firstLeader(state.dealNumber) !== declarer) {
+    return true;
+  }
+  if (state.play.trickHistory.length > 0) {
+    return true;
+  }
+  return state.play.currentTrick.some((played) => played.seat === declarer);
+}
+
+function misereFacingCards(state: GameState, declarer: Seat): readonly Card[] {
+  const discarded =
+    state.talon?.declarer === declarer ? state.talon.discarded : [];
+  return [...currentHands(state)[declarer], ...discarded].sort((left, right) => {
+    const suit = SUITS.indexOf(left.suit) - SUITS.indexOf(right.suit);
+    return suit !== 0 ? suit : left.rank - right.rank;
+  });
+}
 
 export function lightPartners(
   state: GameState,
@@ -38,13 +65,6 @@ export function openWhistHand(state: GameState): readonly Card[] {
   return state.play.hands[partners.passer];
 }
 
-export function misereCardsOpen(state: GameState): boolean {
-  return (
-    state.auctionResult?.type === "misere" &&
-    (state.phase === "discard" || state.phase === "order")
-  );
-}
-
 export function shownWhistHands(
   state: GameState,
   viewer: Seat,
@@ -60,23 +80,22 @@ export function shownWhistHands(
       readonly Card[] | null,
       readonly Card[] | null,
     ];
-    if (misereCardsOpen(state)) {
-      const declarer = state.auctionResult.declarer;
-      if (declarer !== viewer) {
-        hands[declarer] = currentHands(state)[declarer];
-      }
-      return hands;
+    const declarer = state.auctionResult.declarer;
+    const facing =
+      state.phase === "discard" ||
+      state.phase === "order" ||
+      state.phase === "play";
+    if (facing && declarer !== viewer) {
+      hands[declarer] = misereFacingCards(state, declarer);
     }
-    if (state.phase === "play" && state.play !== null) {
-      const declarer = state.auctionResult.declarer;
+    if (misereCatchersOpen(state) && state.play !== null) {
       for (const seat of [0, 1, 2] as const) {
         if (seat !== declarer && seat !== viewer) {
           hands[seat] = state.play.hands[seat];
         }
       }
-      return hands;
     }
-    return hidden;
+    return hands;
   }
   const partners = lightPartners(state);
   if (partners === null || state.play === null) {
@@ -133,9 +152,12 @@ export function gameTurn(state: GameState): Seat | null {
   return null;
 }
 
-export function visibleTalon(state: GameState): readonly Card[] {
+export function visibleTalon(state: GameState, viewer: Seat): readonly Card[] {
   const result = state.auctionResult;
   if (result?.type !== "contract" && result?.type !== "misere") {
+    return [];
+  }
+  if (result.type === "misere" && result.declarer !== viewer) {
     return [];
   }
   const choosingWhist = state.phase === "defense" && state.defense?.phase === "whist";
