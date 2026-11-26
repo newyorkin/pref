@@ -685,9 +685,33 @@ export function dealHeading(
 ): string {
   const declarer =
     deal.declarer === null ? null : playerName(deal.declarer, viewer, names);
+  const note = unplayedNote(deal);
+  const contract = note === null ? deal.contract : `${deal.contract}, ${note}`;
   return declarer === null
-    ? `Сдача ${deal.number}: ${deal.contract}`
-    : `Сдача ${deal.number}: ${declarer} — ${deal.contract}`;
+    ? `Сдача ${deal.number}: ${contract}`
+    : `Сдача ${deal.number}: ${declarer} — ${contract}`;
+}
+
+/**
+ * Why a contract ended without play, for the result heading. «Без трёх» is already in the
+ * contract text. A half-whist is the only way a defender writes висты on the declarer
+ * without play; overflow help висты are written by the declarer.
+ */
+export function unplayedNote(deal: PlayedDeal): string | null {
+  const declarer = deal.declarer;
+  const played = deal.tricks[0] + deal.tricks[1] + deal.tricks[2] > 0;
+  if (
+    declarer === null ||
+    played ||
+    deal.contract === "Мизер" ||
+    deal.contract.includes("без трёх")
+  ) {
+    return null;
+  }
+  const halfWhist = [0, 1, 2].some(
+    (seat) => seat !== declarer && (deal.delta.whists[seat]?.[declarer] ?? 0) > 0,
+  );
+  return halfWhist ? "полвиста" : "без виста";
 }
 
 export function whistNotes(
@@ -739,7 +763,9 @@ export function DealSummary({
                 {played ? <td>{deal.tricks[seat] ?? 0}</td> : null}
                 <td>{entry(deal.delta.bullet[seat] ?? 0)}</td>
                 <td>{entry(deal.delta.mountain[seat] ?? 0)}</td>
-                <td>{whists.length === 0 ? "—" : whists.join(", ")}</td>
+                <td className="deal-summary-whists">
+                  {whists.length === 0 ? "—" : whists.join(", ")}
+                </td>
               </tr>
             );
           })}

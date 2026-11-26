@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import {
   applyGameAction,
   createGame,
@@ -11,7 +12,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, test } from "vitest";
 import { dealJustFinished } from "./GameTable.js";
 import { LayoutDialog } from "./table-layout.js";
-import { DealSummary, dealHeading, whistNotes } from "./table-score.js";
+import { DealSummary, dealHeading, unplayedNote, whistNotes } from "./table-score.js";
 import type { GameSnapshot, PlayedDeal } from "./table-types.js";
 
 const settings = {
@@ -102,10 +103,10 @@ describe("end-of-deal result", () => {
     expect(markup).toContain(">Гора</th>");
     expect(markup).toContain(">Висты</th>");
     expect(markup).toContain(
-      '<th scope="row">Борис</th><td>6</td><td>+2</td><td>—</td><td>—</td>',
+      '<th scope="row">Борис</th><td>6</td><td>+2</td><td>—</td><td class="deal-summary-whists">—</td>',
     );
     expect(markup).toContain(
-      '<th scope="row">вы</th><td>2</td><td>—</td><td>—</td><td>+4 на Борис</td>',
+      '<th scope="row">вы</th><td>2</td><td>—</td><td>—</td><td class="deal-summary-whists">+4 на Борис</td>',
     );
   });
 
@@ -121,7 +122,7 @@ describe("end-of-deal result", () => {
     );
     expect(misereMarkup).toContain("Сдача 4: Вера — Мизер");
     expect(misereMarkup).toContain(
-      '<th scope="row">Вера</th><td>2</td><td>—</td><td>+20</td><td>—</td>',
+      '<th scope="row">Вера</th><td>2</td><td>—</td><td>+20</td><td class="deal-summary-whists">—</td>',
     );
 
     const { after } = playOneDeal();
@@ -145,7 +146,50 @@ describe("end-of-deal result", () => {
     );
     expect(markup).toContain("Сдача 4: Борис — 6 пик, без трёх");
     expect(markup).not.toContain("Взятки");
-    expect(markup).toContain('<th scope="row">Борис</th><td>—</td><td>+6</td><td>—</td>');
+    expect(markup).toContain('<th scope="row">Борис</th><td>—</td><td>+6</td><td class="deal-summary-whists">—</td>');
+  });
+
+  test("says why a contract ended without play", () => {
+    const passed = played({
+      tricks: zeros(),
+      delta: { bullet: [0, 2, 0], mountain: zeros(), whists: [zeros(), zeros(), zeros()] },
+    });
+    expect(unplayedNote(passed)).toBe("без виста");
+    expect(dealHeading(passed, 0, names)).toBe("Сдача 4: Борис — 6 пик, без виста");
+
+    const halfWhist = played({
+      tricks: zeros(),
+      delta: { bullet: [0, 2, 0], mountain: zeros(), whists: [[0, 2, 0], zeros(), zeros()] },
+    });
+    expect(unplayedNote(halfWhist)).toBe("полвиста");
+    expect(
+      renderToStaticMarkup(<DealSummary deal={halfWhist} viewer={0} names={names} />),
+    ).toContain("Сдача 4: Борис — 6 пик, полвиста");
+
+    // Overflow help: the declarer writes висты on another player, which isn't a half-whist.
+    const passedWithHelp = played({
+      tricks: zeros(),
+      delta: { bullet: [1, 1, 0], mountain: zeros(), whists: [zeros(), [10, 0, 0], zeros()] },
+    });
+    expect(unplayedNote(passedWithHelp)).toBe("без виста");
+
+    expect(unplayedNote(played({ tricks: zeros(), contract: "6 пик, без трёх" }))).toBeNull();
+    expect(unplayedNote(played({}))).toBeNull();
+    expect(unplayedNote(played({ declarer: null, contract: "Распасы" }))).toBeNull();
+    expect(unplayedNote(played({ contract: "Мизер", tricks: [0, 5, 5] }))).toBeNull();
+  });
+
+  test("lets the висты entries wrap so the table fits a narrow window", () => {
+    const css = readFileSync(new URL("./table.css", import.meta.url), "utf8");
+    expect(css).toMatch(/\.deal-summary td\.deal-summary-whists \{\s*white-space: normal;/);
+    const markup = renderToStaticMarkup(
+      <DealSummary
+        deal={played({ delta: { bullet: zeros(), mountain: zeros(), whists: [[0, 4, 0], zeros(), zeros()] } })}
+        viewer={0}
+        names={names}
+      />,
+    );
+    expect(markup).toContain('<td class="deal-summary-whists">+4 на Борис</td>');
   });
 
   test("the result dialog shows the deal record above the layout", () => {

@@ -916,6 +916,7 @@ span.prikup-back {
 }
 
 .deal-summary table {
+  max-width: 100%;
   border-collapse: collapse;
   font: 0.92rem/1.3 "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
 }
@@ -926,6 +927,10 @@ span.prikup-back {
   border-bottom: 1px solid rgba(196, 165, 116, 0.45);
   text-align: left;
   white-space: nowrap;
+}
+
+.deal-summary td.deal-summary-whists {
+  white-space: normal;
 }
 
 .deal-summary thead th {
