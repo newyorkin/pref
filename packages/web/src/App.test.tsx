@@ -2169,6 +2169,47 @@ describe("display profile", () => {
     expect(hand).toContain("z-index: 7");
     expect(css).toContain("opacity: 0.92");
   });
+
+  test("shrinks the card faces in «Ваш снос» with its small cards", () => {
+    const css = readFileSync(new URL("./table.css", import.meta.url), "utf8");
+    // The first rule whose selector starts its line, so ".pc" doesn't find ".opponent-cards .pc".
+    const rule = (selector: string, from = css) => {
+      const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\n/g, "\\n\\s*");
+      const start = from.search(new RegExp(`(?:^|\\n)\\s*${escaped} \\{`));
+      expect(start).toBeGreaterThanOrEqual(0);
+      return from.slice(start, from.indexOf("}", start));
+    };
+    const rem = (block: string, property: string) =>
+      Number(block.match(new RegExp(`${property}: (?:calc\\()?([\\d.]+)rem`))?.[1]);
+    const snosCard = rule(".discard-pile .trick .pc");
+    const handCard = rule(".pc");
+    const snosCorner = rule(".discard-pile .pc-corner");
+    const snosSuit = rule(".discard-pile .pc-suit,\n.discard-pile .pc-court");
+    // The снос's cards are about half as high as the hand's, and so are its rank and suits.
+    expect(rem(snosCard, "height")).toBeLessThan(rem(handCard, "height") * 0.6);
+    expect(rem(snosCorner, "font-size")).toBeLessThan(rem(rule(".pc-corner"), "font-size") * 0.7);
+    expect(rem(snosSuit, "font-size")).toBeLessThan(rem(rule(".pc-suit,\n.pc-court"), "font-size") * 0.6);
+    expect(snosCorner).toContain("var(--snos-scale)");
+    expect(snosSuit).toContain("var(--snos-scale)");
+    for (const face of ["magnific", "russ"]) {
+      expect(css).toContain(`[data-card-face="${face}"] .discard-pile`);
+    }
+    // «Русские» keep their bottom corner at the bottom right: it is a .pc-corner too.
+    const russBottom = css.match(
+      /\*\/\n\[data-card-face="russ"\] \.discard-pile \.pc-corner-br \{[^}]*\}/,
+    )?.[0] ?? "";
+    expect(russBottom).toContain("top: auto");
+    expect(russBottom).toContain("left: auto");
+    // The faces grow with the cards when the player picks a bigger card size.
+    const desktop = css.slice(css.indexOf("@media (min-width: 641px)"));
+    expect(rule(".discard-pile", desktop)).toContain("--snos-scale: var(--card-scale, 1)");
+    // The hand and the current trick keep their faces.
+    expect(rule(".pc-corner")).toContain("font-size: 0.92rem");
+    expect(rule(".pc-suit,\n.pc-court")).toContain("font-size: 1.7rem");
+    expect(rule(".pc-corner", desktop)).toContain("font-size: calc(0.92rem * var(--card-scale, 1))");
+    expect(css).toContain("rgba(196, 165, 116, 0.22) 0 var(--magnific-circle, 1.15rem)");
+    expect(css).not.toMatch(/\.(?:trick-play|game-hand|hand-seat)[^{]*\{[^}]*--magnific-circle/);
+  });
 });
 
 class MemoryStorage implements Pick<Storage, "getItem" | "setItem"> {

@@ -1659,8 +1659,8 @@ section.trick.trick-play {
   background:
     radial-gradient(
       circle at 50% 54%,
-      rgba(196, 165, 116, 0.22) 0 1.15rem,
-      transparent 1.28rem
+      rgba(196, 165, 116, 0.22) 0 var(--magnific-circle, 1.15rem),
+      transparent calc(var(--magnific-circle, 1.15rem) + 0.13rem)
     ),
     repeating-linear-gradient(
       90deg,
@@ -1800,8 +1800,71 @@ section.trick.trick-play {
     0 8px 14px rgba(0, 0, 0, 0.22);
 }
 
+/* «Ваш снос» shows cards at about half the hand's size, so its rank, suit marks and frame shrink
+   with them; at the hand's sizes the corner suit runs into the centre suit. */
+.discard-pile {
+  --snos-scale: 1;
+  --magnific-circle: calc(0.62rem * var(--snos-scale));
+}
+
+.discard-pile .pc-corner {
+  top: calc(0.2rem * var(--snos-scale));
+  left: calc(0.22rem * var(--snos-scale));
+  font-size: calc(0.58rem * var(--snos-scale));
+}
+
+.discard-pile .pc-suit,
+.discard-pile .pc-court {
+  font-size: calc(0.92rem * var(--snos-scale));
+}
+
+[data-card-face="magnific"] .discard-pile .pc-frame {
+  inset: calc(0.24rem * var(--snos-scale));
+}
+
+[data-card-face="magnific"] .discard-pile .pc-frame::before,
+[data-card-face="magnific"] .discard-pile .pc-frame::after {
+  font-size: calc(0.42rem * var(--snos-scale));
+}
+
+[data-card-face="magnific"] .discard-pile .pc-frame::before {
+  top: calc(-0.24rem * var(--snos-scale));
+}
+
+[data-card-face="magnific"] .discard-pile .pc-frame::after {
+  bottom: calc(-0.24rem * var(--snos-scale));
+}
+
+[data-card-face="magnific"] .discard-pile .pc-corner {
+  padding: 0.02rem 0.06rem 0.04rem;
+}
+
+[data-card-face="russ"] .discard-pile .pc-corner,
+[data-card-face="russ"] .discard-pile .pc-corner-br {
+  font-size: calc(0.5rem * var(--snos-scale));
+}
+
+/* The bottom corner is a .pc-corner too, so the снос's top and left above would pull it up. */
+[data-card-face="russ"] .discard-pile .pc-corner-br {
+  top: auto;
+  right: calc(0.14rem * var(--snos-scale));
+  bottom: calc(0.14rem * var(--snos-scale));
+  left: auto;
+}
+
+[data-card-face="russ"] .discard-pile .pc-pips {
+  inset: calc(0.55rem * var(--snos-scale)) calc(0.24rem * var(--snos-scale));
+}
+
+[data-card-face="russ"] .discard-pile .pc-pip {
+  font-size: calc(0.46rem * var(--snos-scale));
+}
 
 @media (min-width: 641px) {
+  .discard-pile {
+    --snos-scale: var(--card-scale, 1);
+  }
+
   .game-top {
     padding-right: 13rem;
   }
