@@ -52,7 +52,7 @@ describe("table conventions during play", () => {
     }
   });
 
-  test("shows the bullet length, raspas, prikup and fixed rules without controls", () => {
+  test("shows the длина пули, распасы, прикуп and fixed rules without controls", () => {
     const markup = renderToStaticMarkup(
       <RulesDialog settings={settings} onClose={() => undefined} />,
     );
