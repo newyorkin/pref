@@ -1,6 +1,6 @@
 import { PlayingCard } from "./table-cards.js";
 import type { Card, GameAction, GameSnapshot } from "./table-types.js";
-import { sameCard, toggleSelected } from "./table-utils.js";
+import { playsFromCards, sameCard, toggleSelected } from "./table-utils.js";
 export function Hand({
   state,
   hand,
@@ -20,6 +20,7 @@ export function Hand({
   playNow: (action: GameAction) => void;
   trump: string | null;
 }) {
+  const playing = playsFromCards(hand, playActions);
   return (
     <section className="game-hand" aria-label="Ваши карты">
       {hand.map((card, index) => {
@@ -35,6 +36,7 @@ export function Hand({
             trump={trump === card.suit}
             talon={fromTalon}
             selected={selected.some((item) => sameCard(item, card))}
+            unplayable={playing && play === undefined}
             onClick={
               discardActions.length > 0
                 ? () => toggleSelected(card, selected, setSelected)

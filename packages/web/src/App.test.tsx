@@ -778,7 +778,7 @@ describe("table form", () => {
     expect(open).not.toContain("open-suit");
     expect(open.match(/class="opponent-cards"/g)).toHaveLength(1);
     expect(open).toContain('<button type="button" class="pc pc-red pc-trump" aria-label="7 ♥"');
-    expect(open).toContain('<div class="pc pc-red" aria-label="9 ♦"');
+    expect(open).toContain('<div class="pc pc-red pc-unplayable" aria-label="9 ♦"');
     expect(open.match(/Карты всветлую/g)).toHaveLength(1);
   });
 
@@ -890,7 +890,7 @@ describe("table form", () => {
     expect(light).toContain(
       '<button type="button" class="pc pc-red pc-trump" aria-label="7 ♥"',
     );
-    expect(light).toContain('<div class="pc pc-red" aria-label="9 ♦"');
+    expect(light).toContain('<div class="pc pc-red pc-unplayable" aria-label="9 ♦"');
     expect(light).toContain('aria-label="К ♠"');
     expect(light).toContain('aria-label="10 ♣"');
     expect(light).not.toContain("opponent-suit-row");

@@ -11,6 +11,7 @@ import type { Card, GameAction, GameSnapshot } from "./table-types.js";
 import {
   cardsLabel,
   isRedSuit,
+  playsFromCards,
   rankLabel,
   sameCard,
   sortHand,
@@ -52,6 +53,7 @@ export function Opponent({
   const visible = sortHand(openCards, "asc", profile.suitOrder);
   const bySuit = profile.openLayout === "suits";
   const rows = bySuit ? suitRows(visible) : [visible];
+  const playing = playsFromCards(visible, playActions);
   function openCard(card: Card, index: number): React.JSX.Element {
     const play = playActions.find((action) => sameCard(action.card, card));
     return (
@@ -59,6 +61,7 @@ export function Opponent({
         key={`${card.suit}:${card.rank}:${index}`}
         card={card}
         trump={trump === card.suit}
+        unplayable={playing && play === undefined}
         onClick={play === undefined ? undefined : () => onAction(play)}
       />
     );
@@ -116,6 +119,7 @@ export function PlayingCard({
   trump = false,
   talon = false,
   selected = false,
+  unplayable = false,
   hideCornerSuit = false,
   placeClass,
   onClick,
@@ -125,6 +129,7 @@ export function PlayingCard({
   trump?: boolean;
   talon?: boolean;
   selected?: boolean;
+  unplayable?: boolean;
   hideCornerSuit?: boolean;
   placeClass?: string;
   onClick?: () => void;
@@ -136,6 +141,7 @@ export function PlayingCard({
     trump ? "pc-trump" : "",
     talon ? "pc-talon" : "",
     selected ? "pc-selected" : "",
+    unplayable ? "pc-unplayable" : "",
     placeClass ?? "",
   ]
     .filter((item) => item.length > 0)

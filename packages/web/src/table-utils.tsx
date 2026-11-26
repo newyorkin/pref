@@ -85,6 +85,20 @@ export function suitRows(cards: readonly Card[]): Card[][] {
   return rows;
 }
 
+/**
+ * Whether the server's playCard actions are for these cards. The server offers them only for
+ * the hand that moves now: the viewer's own hand, or the open hand they control in светлую.
+ */
+export function playsFromCards(
+  cards: readonly Card[],
+  playActions: readonly GameAction[],
+): boolean {
+  return playActions.some(
+    (action) =>
+      action.type === "playCard" && cards.some((card) => sameCard(action.card, card)),
+  );
+}
+
 export function sameCard(left: Card | undefined, right: Card | undefined): boolean {
   return (
     left !== undefined &&
