@@ -42,6 +42,7 @@ import {
   pulkaCircle,
   pulkaFields,
   pulkaLines,
+  resultsText,
   unplayedNote,
   whistNotes,
   type PulkaField,
@@ -324,6 +325,87 @@ function chainLinesOf(markup: string): { text: string; size: number }[][] {
     })),
   );
 }
+
+describe("results file", () => {
+  test("names the whistlers and passers of each contract by place", () => {
+    const deals = [
+      played({
+        number: 1,
+        declarer: 2,
+        tricks: [3, 1, 6],
+        defense: { roles: ["whist", "pass", null], whistStyle: "light" },
+      }),
+      played({
+        number: 2,
+        declarer: 0,
+        tricks: [6, 2, 2],
+        defense: { roles: [null, "whist", "whist"], whistStyle: null },
+      }),
+      played({
+        number: 3,
+        tricks: zeros(),
+        defense: { roles: ["pass", null, "pass"], whistStyle: null },
+      }),
+      played({
+        number: 4,
+        declarer: 0,
+        tricks: zeros(),
+        defense: { roles: [null, "pass", "halfWhist"], whistStyle: null },
+      }),
+      played({
+        number: 5,
+        declarer: 0,
+        tricks: [6, 4, 0],
+        defense: { roles: [null, "whistBack", "halfWhist"], whistStyle: "dark" },
+      }),
+      played({ number: 6, contract: "Мизер", tricks: [0, 5, 5] }),
+    ];
+    const lines = resultsText(names, [0, 0, 0], deals)
+      .split("\n")
+      .filter((line) => /^\d+\./.test(line));
+
+    expect(lines).toEqual([
+      "1. Вера — 6 пик. Анна — вист в светлую, Борис — пас. Взяток: Анна 3, Борис 1, Вера 6. Анна 0, Борис 0, Вера 0",
+      "2. Анна — 6 пик. Борис — вист, Вера — вист. Взяток: Анна 6, Борис 2, Вера 2. Анна 0, Борис 0, Вера 0",
+      "3. Борис — 6 пик. Вера — пас, Анна — пас. Анна 0, Борис 0, Вера 0",
+      "4. Анна — 6 пик. Борис — пас, Вера — полвиста. Анна 0, Борис 0, Вера 0",
+      "5. Анна — 6 пик. Борис — возврат виста в тёмную, Вера — полвиста. Взяток: Анна 6, Борис 4, Вера 0. Анна 0, Борис 0, Вера 0",
+      "6. Борис — Мизер. Взяток: Анна 0, Борис 5, Вера 5. Анна 0, Борис 0, Вера 0",
+    ]);
+  });
+
+  test("writes the same file whichever player downloads it", () => {
+    let after = createGame(settings, deal(42));
+    const wanted = (seat: Seat, action: GameAction): boolean =>
+      action.type === "auction"
+        ? action.action.type === (seat === 0 ? "bid" : "pass")
+        : action.type === "defense"
+          ? action.action.type === (seat === 1 ? "whist" : "pass") ||
+            action.action.type === "light"
+          : ["discard", "order", "playCard"].includes(action.type);
+    for (let step = 0; step < 200 && (after.deals ?? []).length === 0; step++) {
+      const move = ([0, 1, 2] as const).flatMap((seat) =>
+        (gameView(after, seat).allowedActions as GameAction[])
+          .filter((action) => wanted(seat, action))
+          .map((action) => ({ seat, action })),
+      )[0];
+      if (move === undefined) {
+        throw new Error("no seat can act");
+      }
+      const result = applyGameAction(after, move.seat, move.action);
+      expect(result.accepted).toBe(true);
+      after = result.state;
+    }
+    const files = ([0, 1, 2] as const).map((seat) => {
+      const snapshot = view(after, seat);
+      return resultsText(names, [0, 0, 0], snapshot.deals ?? []);
+    });
+    expect(after.deals?.[0]?.defense?.roles).toEqual([null, "whist", "pass"]);
+    expect(files[0]).toContain("Борис — вист в светлую, Вера — пас");
+    expect(files[1]).toBe(files[0]);
+    expect(files[2]).toBe(files[0]);
+  });
+});
 
 describe("last deal's entries on the bullet sheet", () => {
   test("highlights nothing before the first deal or when the last record is empty", () => {

@@ -7,7 +7,7 @@ import {
   type Trump,
 } from "./auction.js";
 import { type Card, type Deal } from "./deck.js";
-import { type DefenseAction, type DefenseState } from "./defense.js";
+import { type DefenseAction, type DefenseState, type WhistStyle } from "./defense.js";
 import { type BulletScore } from "./scoring.js";
 import { type TableSettings } from "./settings.js";
 import { type TalonState } from "./talon.js";
@@ -58,6 +58,23 @@ export interface PlayedDeal {
   readonly contract: string;
   readonly tricks: readonly [number, number, number];
   readonly delta: BulletScore["last"];
+  /** How the defenders answered a contract; absent for мизер, распасы and без трёх. */
+  readonly defense?: DealDefense;
+}
+
+/**
+ * A defender's final word on the contract. `whistBack` is вист after the other defender's
+ * полвиста (возврат виста); that defender keeps `halfWhist` and plays as the passer.
+ */
+export type DealDefenseRole = "whist" | "pass" | "halfWhist" | "whistBack";
+
+export interface DealDefense {
+  readonly roles: readonly [
+    DealDefenseRole | null,
+    DealDefenseRole | null,
+    DealDefenseRole | null,
+  ];
+  readonly whistStyle: WhistStyle | null;
 }
 
 export interface DealLayout {

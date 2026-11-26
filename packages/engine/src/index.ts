@@ -37,6 +37,8 @@ export {
   createGame,
   gameRaspasMultiplier,
   gameView,
+  type DealDefense,
+  type DealDefenseRole,
   type GameAction,
   type GamePhase,
   type PlayedDeal,

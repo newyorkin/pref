@@ -20,6 +20,8 @@ export interface DefenseState {
   readonly phase: DefensePhase;
   readonly turn: Seat | null;
   readonly halfWhist: Seat | null;
+  /** The defender whose полвиста the other defender answered with вист (возврат виста). */
+  readonly halfWhistReturned?: Seat;
 }
 
 export type DefenseAction =
@@ -145,7 +147,12 @@ function replyToHalfWhist(
   ];
   decisions[firstDefender] = "whist";
   decisions[secondDefender] = "pass";
-  return accept(finishWhistDeclarations({ ...state, halfWhist: null }, decisions));
+  return accept(
+    finishWhistDeclarations(
+      { ...state, halfWhist: null, halfWhistReturned: secondDefender },
+      decisions,
+    ),
+  );
 }
 
 function applyWhistStyle(

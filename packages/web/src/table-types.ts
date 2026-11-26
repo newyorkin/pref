@@ -121,6 +121,14 @@ export interface PlayedDeal {
       [number, number, number],
     ];
   };
+  defense?: DealDefense;
+}
+
+export type DealDefenseRole = "whist" | "pass" | "halfWhist" | "whistBack";
+
+export interface DealDefense {
+  roles: [DealDefenseRole | null, DealDefenseRole | null, DealDefenseRole | null];
+  whistStyle: "light" | "dark" | null;
 }
 
 export interface SnapshotEnvelope {

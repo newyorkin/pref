@@ -84,6 +84,8 @@ import { discardCards, takeTalon } from "./talon.js";
 import { createTrickPlay, playCard, type TrickPlayState } from "./tricks.js";
 import { view as trickView } from "./view.js";
 export type {
+  DealDefense,
+  DealDefenseRole,
   DealLayout,
   GameAction,
   GamePhase,

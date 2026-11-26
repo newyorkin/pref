@@ -828,14 +828,54 @@ export function dealLine(deal: PlayedDeal, names: readonly string[]): string {
         )}`,
     )
     .join(", ");
+  const defense = defenseText(deal, names);
+  const heading = defense === null ? title : `${title}. ${defense}`;
   const played = deal.tricks[0] + deal.tricks[1] + deal.tricks[2] > 0;
   if (!played) {
-    return `${title}. ${points}`;
+    return `${heading}. ${points}`;
   }
   const tricks = names
     .map((name, seat) => `${name} ${deal.tricks[seat] ?? 0}`)
     .join(", ");
-  return `${title}. Взяток: ${tricks}. ${points}`;
+  return `${heading}. Взяток: ${tricks}. ${points}`;
+}
+
+const DEFENSE_ROLE_WORD = {
+  whist: "вист",
+  pass: "пас",
+  halfWhist: "полвиста",
+  whistBack: "возврат виста",
+} as const;
+
+const WHIST_STYLE_WORD = { light: "в светлую", dark: "в тёмную" } as const;
+
+/**
+ * Each defender's answer to the contract by place, first defender first, for example
+ * «Борис — вист в светлую, Вера — пас». The style is named for a single whistler only.
+ */
+export function defenseText(
+  deal: PlayedDeal,
+  names: readonly string[],
+): string | null {
+  const declarer = deal.declarer;
+  const defense = deal.defense;
+  if (declarer === null || defense === undefined) {
+    return null;
+  }
+  const parts = [1, 2].flatMap((offset) => {
+    const seat = (declarer + offset) % 3;
+    const role = defense.roles[seat];
+    if (role === null || role === undefined) {
+      return [];
+    }
+    const style =
+      (role === "whist" || role === "whistBack") && defense.whistStyle !== null
+        ? ` ${WHIST_STYLE_WORD[defense.whistStyle]}`
+        : "";
+    const name = names[seat] ?? `место ${seat + 1}`;
+    return [`${name} — ${DEFENSE_ROLE_WORD[role]}${style}`];
+  });
+  return parts.length === 0 ? null : parts.join(", ");
 }
 
 export function downloadResults(text: string): void {
