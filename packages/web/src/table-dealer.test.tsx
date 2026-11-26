@@ -57,24 +57,27 @@ function cornerOf(dealer: Seat, viewer: Seat): string {
   return dealer === viewer ? "me" : dealer === (viewer + 1) % 3 ? "left" : "right";
 }
 
+/** The seat that has to act and its actions; proposals and «без трёх» don't count. */
+function actor(state: GameState): { seat: Seat; actions: EngineAction[] } {
+  for (const seat of seats) {
+    const actions = gameView(state, seat).allowedActions.filter(
+      (action) =>
+        action.type !== "propose" &&
+        action.type !== "proposal" &&
+        action.type !== "withoutThree",
+    );
+    if (actions.length > 0) {
+      return { seat, actions: [...actions] };
+    }
+  }
+  throw new Error(`nobody acts in ${state.phase}`);
+}
+
 /** Plays the deal out with each seat's first action until the next deal's торговля. */
 function nextDeal(state: GameState): GameState {
   let current = state;
   for (let step = 0; step < 300 && current.dealNumber === state.dealNumber; step++) {
-    const turn = seats
-      .map((seat) => ({
-        seat,
-        actions: gameView(current, seat).allowedActions.filter(
-          (action: EngineAction) =>
-            action.type !== "propose" &&
-            action.type !== "proposal" &&
-            action.type !== "withoutThree",
-        ),
-      }))
-      .find((entry) => entry.actions.length > 0);
-    if (turn === undefined) {
-      throw new Error(`nobody acts in ${current.phase}`);
-    }
+    const turn = actor(current);
     const result = applyGameAction(current, turn.seat, turn.actions[0] as EngineAction);
     expect(result.accepted).toBe(true);
     current = result.state;
@@ -128,20 +131,7 @@ describe("the dealer", () => {
     let state = deals[0] as GameState;
     const dealer = dealerSeat(state.dealNumber);
     for (let step = 0; step < 100 && state.phase !== "play"; step++) {
-      const turn = seats
-        .map((seat) => ({
-          seat,
-          actions: gameView(state, seat).allowedActions.filter(
-            (action: EngineAction) =>
-              action.type !== "propose" &&
-              action.type !== "proposal" &&
-              action.type !== "withoutThree",
-          ),
-        }))
-        .find((entry) => entry.actions.length > 0);
-      if (turn === undefined) {
-        throw new Error(`nobody acts in ${state.phase}`);
-      }
+      const turn = actor(state);
       const pick =
         state.phase === "auction"
           ? turn.actions.find((action) =>
