@@ -1,0 +1,79 @@
+name: Deploy production
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Коммит из master, уже выкатанный на pref-test
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: master
+          fetch-depth: 0
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: git.yorkin.online
+          username: ${{ secrets.FORGEJO_USERNAME }}
+          password: ${{ secrets.FORGEJO_TOKEN }}
+      - name: Promote the tested image and point prod at it
+        env:
+          INPUT_SHA: ${{ inputs.sha }}
+          USERNAME: ${{ secrets.FORGEJO_USERNAME }}
+          TOKEN: ${{ secrets.FORGEJO_TOKEN }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          set -euo pipefail
+          input=$(printf '%s' "$INPUT_SHA" | tr -d '[:space:]')
+          if ! printf '%s' "$input" | grep -Eq '^[0-9a-fA-F]{7,40}$'; then
+            echo "::error::Нужен hex-коммит длиной от 7 до 40 символов."
+            exit 1
+          fi
+          if ! full=$(git rev-parse --verify "${input}^{commit}"); then
+            echo "::error::Коммит ${input} не найден."
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$full" origin/master; then
+            echo "::error::Коммит ${full} не входит в master."
+            exit 1
+          fi
+
+          src="git.yorkin.online/dan4eg/pref:test-${full}"
+          dst="git.yorkin.online/dan4eg/pref:${full}"
+          if ! docker buildx imagetools inspect "$src" >/dev/null; then
+            echo "::error::На тесте нет образа ${src}. Сначала этот коммит должен попасть в master и выкатиться на pref-test."
+            exit 1
+          fi
+          docker buildx imagetools create --tag "$dst" "$src"
+
+          auth=$(printf '%s' "${USERNAME}:${TOKEN}" | base64 -w0)
+          git -c http.extraHeader="Authorization: Basic ${auth}" \
+            clone --depth 1 https://git.yorkin.online/dan4eg/gitops-apps.git
+          cd gitops-apps
+          git config user.email "actions@yorkin.online"
+          git config user.name "github-actions"
+          file=apps/pref/deployment.yaml
+          sed -i "s|image: git.yorkin.online/dan4eg/pref:.*|image: git.yorkin.online/dan4eg/pref:${full}|" "$file"
+          grep -Fq "image: git.yorkin.online/dan4eg/pref:${full}" "$file"
+          git add "$file"
+          if git diff --cached --quiet; then
+            echo "prod image tag already current"
+            exit 0
+          fi
+          git commit -m "Выкатить pref ${full} (${ACTOR})."
+          git -c http.extraHeader="Authorization: Basic ${auth}" \
+            push origin HEAD:main
