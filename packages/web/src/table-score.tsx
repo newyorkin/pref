@@ -677,3 +677,106 @@ export function signed(value: number): string {
   }
   return "0";
 }
+
+export function dealHeading(
+  deal: PlayedDeal,
+  viewer: number,
+  names: readonly (string | null)[] | null,
+): string {
+  const declarer =
+    deal.declarer === null ? null : playerName(deal.declarer, viewer, names);
+  const note = unplayedNote(deal);
+  const contract = note === null ? deal.contract : `${deal.contract}, ${note}`;
+  return declarer === null
+    ? `Сдача ${deal.number}: ${contract}`
+    : `Сдача ${deal.number}: ${declarer} — ${contract}`;
+}
+
+/**
+ * Why a contract ended without play, for the result heading. «Без трёх» is already in the
+ * contract text. A half-whist is the only way a defender writes висты on the declarer
+ * without play; overflow help висты are written by the declarer.
+ */
+export function unplayedNote(deal: PlayedDeal): string | null {
+  const declarer = deal.declarer;
+  const played = deal.tricks[0] + deal.tricks[1] + deal.tricks[2] > 0;
+  if (
+    declarer === null ||
+    played ||
+    deal.contract === "Мизер" ||
+    deal.contract.includes("без трёх")
+  ) {
+    return null;
+  }
+  const halfWhist = [0, 1, 2].some(
+    (seat) => seat !== declarer && (deal.delta.whists[seat]?.[declarer] ?? 0) > 0,
+  );
+  return halfWhist ? "полвиста" : "без виста";
+}
+
+export function whistNotes(
+  deal: PlayedDeal,
+  seat: number,
+  viewer: number,
+  names: readonly (string | null)[] | null,
+): string[] {
+  return [0, 1, 2].flatMap((other) => {
+    const value = deal.delta.whists[seat]?.[other] ?? 0;
+    if (other === seat || value === 0) {
+      return [];
+    }
+    const target = other === viewer ? "вас" : playerName(other, viewer, names);
+    return [`${signed(value)} на ${target}`];
+  });
+}
+
+export function DealSummary({
+  deal,
+  viewer,
+  names,
+}: {
+  deal: PlayedDeal;
+  viewer: number;
+  names: readonly (string | null)[] | null;
+}): React.JSX.Element {
+  const played = deal.tricks[0] + deal.tricks[1] + deal.tricks[2] > 0;
+  const entry = (value: number) => (value === 0 ? "—" : signed(value));
+  return (
+    <section className="deal-summary" aria-label="Запись за сдачу">
+      <h2>{dealHeading(deal, viewer, names)}</h2>
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Игрок</th>
+            {played ? <th scope="col">Взятки</th> : null}
+            <th scope="col">Пуля</th>
+            <th scope="col">Гора</th>
+            <th scope="col">Висты</th>
+          </tr>
+        </thead>
+        <tbody>
+          {[0, 1, 2].map((seat) => {
+            const whists = whistNotes(deal, seat, viewer, names);
+            return (
+              <tr key={seat}>
+                <th scope="row">{playerName(seat, viewer, names)}</th>
+                {played ? <td>{deal.tricks[seat] ?? 0}</td> : null}
+                <td>{entry(deal.delta.bullet[seat] ?? 0)}</td>
+                <td>{entry(deal.delta.mountain[seat] ?? 0)}</td>
+                <td className="deal-summary-whists">
+                  {whists.length === 0
+                    ? "—"
+                    : whists.map((note, index) => (
+                        <span key={note} className="deal-summary-whist">
+                          {index === 0 ? note : `, ${note}`}
+                        </span>
+                      ))}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </section>
+  );
+}
