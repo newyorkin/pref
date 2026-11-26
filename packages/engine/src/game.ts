@@ -187,7 +187,7 @@ export function applyGameAction(
             ...quiet,
             ...withSpeech(
               withSpeech(quiet, null, ace, true),
-              ((state.dealNumber + 2) % 3) as Seat,
+              dealerSeat(state.dealNumber),
               talonAceRequest(aceCount),
               false,
             ),

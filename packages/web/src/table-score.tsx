@@ -11,6 +11,7 @@ export function SeatTriangle({
   tricks,
   turn,
   contract = null,
+  dealer = null,
 }: {
   viewer: number;
   left: number;
@@ -19,6 +20,7 @@ export function SeatTriangle({
   tricks: readonly number[];
   turn: number | null;
   contract?: { declarer: number; bid: AuctionBid } | null;
+  dealer?: number | null;
 }): React.JSX.Element {
   const corners = [
     { seat: left, place: "left" },
@@ -79,6 +81,11 @@ export function SeatTriangle({
               {" "}
               <ContractBadge bid={contract.bid} />
             </>
+          ) : null}
+          {dealer === corner.seat ? (
+            <span className="dealer-mark" title="Сдающий в этой сдаче">
+              {corner.place === "me" ? "сдавали" : "сдавал"}
+            </span>
           ) : null}
         </p>
       ))}

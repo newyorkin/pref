@@ -7,6 +7,8 @@
   --green: #1b4d38;
   --suit-red: #9d3a3a;
   --table-foot: 8.2rem;
+  /* How far one's own заказ below the tip lifts the trick triangle; «Ваш ход» moves up as far. */
+  --own-contract-lift: 1.05rem;
   /* Keep a separate row for the raspas talon above the three seat positions. */
   --trick-h: min(calc(4.8rem * var(--card-scale, 1)), max(2.6rem, calc((100dvh - var(--table-foot) - 18rem) / 4)));
   --trick-w: calc(var(--trick-h) * 0.70833333);
@@ -1216,11 +1218,16 @@ section.trick.trick-play {
 
 /* One's own заказ sits on its own line under the tip; the triangle moves up to make room. */
 .seat-triangle-own-contract {
-  margin-bottom: 1.05rem;
+  margin-bottom: var(--own-contract-lift);
 }
 
 .seat-triangle-own-contract .seat-corner-me {
   bottom: -0.9rem;
+}
+
+/* «Ваш ход» moves up with the triangle, so it doesn't cover the right corner's name. */
+.game-own-contract .turn-indicator {
+  bottom: calc(var(--table-foot) + 0.5rem + var(--own-contract-lift));
 }
 
 .seat-corner > span > .contract-badge {
@@ -1230,6 +1237,28 @@ section.trick.trick-play {
 .seat-corner-me > .contract-badge {
   display: table;
   margin: 0.1rem auto 0;
+}
+
+/* The dealer mark sits on its own line under the trick count, so it never squeezes the name. */
+.seat-corner > .dealer-mark {
+  display: inline-block;
+  margin-top: 0.1rem;
+  padding: 0 0.3rem;
+  border: 1px solid var(--gold);
+  border-radius: 0.4rem;
+  color: var(--gold);
+  font-size: 0.7rem;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+/* The tip has no room under «вы», so one's own mark goes beside the corner's last line, outside
+   the triangle. That keeps the trick dock from growing up into «Ваш ход». */
+.seat-corner-me > .dealer-mark {
+  position: absolute;
+  bottom: 0.1rem;
+  left: calc(100% + 0.5rem);
+  margin: 0;
 }
 
 .seat-corner-turn {

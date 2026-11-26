@@ -1,3 +1,4 @@
+import { dealerSeat } from "@pref/engine";
 import { useEffect, useRef, useState } from "react";
 import type { TableSettings } from "./App.js";
 import {
@@ -406,7 +407,7 @@ export function GameSnapshotPanel({
       : leadCard !== null && state.currentTrick.length === 0
         ? [{ seat, card: leadCard }]
         : state.currentTrick;
-  const dealer = (state.dealNumber + 2) % 3;
+  const dealer = dealerSeat(state.dealNumber);
   const gap = emptySeatMessage(occupiedSeats, state.auction.turn);
   const spoken = wordsOnStep(state.speech, state.speechStep);
   const playTurn = state.phase === "play" ? state.turn : null;
@@ -417,6 +418,7 @@ export function GameSnapshotPanel({
       className={[
         showAuction || showOrder ? "game-screen game-screen-auction" : "game-screen",
         (state.discarded ?? []).length > 0 ? "game-has-discard" : "",
+        contract?.declarer === seat ? "game-own-contract" : "",
       ]
         .filter((name) => name !== "")
         .join(" ")}
@@ -546,6 +548,7 @@ export function GameSnapshotPanel({
           names={playerNames}
           tricks={state.tricksWon}
           contract={contract}
+          dealer={dealer}
           turn={
             typeof state.turn === "number"
               ? state.turn

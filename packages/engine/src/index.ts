@@ -48,6 +48,7 @@ export {
   type SpeechDeal,
   type TableSpeech,
 } from "./game.js";
+export { dealerSeat } from "./game-state.js";
 export {
   applyRaspasOutcome,
   createMiserePlay,
