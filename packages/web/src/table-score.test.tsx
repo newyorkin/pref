@@ -545,34 +545,33 @@ describe("bullet dialog size", () => {
     expect(landscape).toMatch(/\.bullet-dialog \.bullet-close \{\s*align-self: flex-start;/);
   });
 
-  test("counts two quick presses close together as a double press, for a mouse or a finger", () => {
-    const first = { x: 700, y: 100, time: 1000 };
+  test("counts two presses within 300 ms as a double press, for a mouse or a finger", () => {
+    const first = { time: 1000 };
     expect(isDoublePress(null, first)).toBe(false);
-    expect(isDoublePress(first, { x: 700, y: 100, time: 1200 })).toBe(true);
-    expect(isDoublePress(first, { x: 706, y: 108, time: 1300 })).toBe(true);
+    expect(isDoublePress(first, { time: 1000 })).toBe(true);
+    expect(isDoublePress(first, { time: 1200 })).toBe(true);
+    expect(isDoublePress(first, { time: 1300 })).toBe(true);
     // Too slow.
-    expect(isDoublePress(first, { x: 700, y: 100, time: 1301 })).toBe(false);
-    // Too far apart.
-    expect(isDoublePress(first, { x: 711, y: 100, time: 1100 })).toBe(false);
+    expect(isDoublePress(first, { time: 1301 })).toBe(false);
     // Out of order.
-    expect(isDoublePress(first, { x: 700, y: 100, time: 900 })).toBe(false);
+    expect(isDoublePress(first, { time: 900 })).toBe(false);
   });
 
   test("the second quick press only resets, and a third starts over", () => {
-    const first = { x: 700, y: 100, time: 1000 };
+    const first = { time: 1000 };
     const one = cornerPressDown(null, first);
     expect(one).toEqual({ reset: false, last: first });
-    const two = cornerPressDown(one.last, { x: 701, y: 101, time: 1150 });
+    const two = cornerPressDown(one.last, { time: 1150 });
     expect(two).toEqual({ reset: true, last: null });
-    const third = { x: 700, y: 100, time: 1250 };
+    const third = { time: 1250 };
     expect(cornerPressDown(two.last, third)).toEqual({ reset: false, last: third });
   });
 
   test("a press that resized isn't the first half of a double press, a tap or a jitter is", () => {
     const limits = { minWidth: 320, maxWidth: 1000, minHeight: 260, maxHeight: 900 };
     const origin = { x: 700, y: 100, width: 600, height: 640 };
-    const first = { x: 700, y: 100, time: 1000 };
-    const next = { x: 700, y: 100, time: 1200 };
+    const first = { time: 1000 };
+    const next = { time: 1200 };
 
     // A drag that resized: the next quick press is a first press.
     const dragged = resizeStep(origin, { x: 750, y: 70 }, limits, null);

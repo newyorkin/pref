@@ -358,11 +358,7 @@ export function BulletDialog({
   function startResize(event: React.PointerEvent<HTMLDivElement>): void {
     event.preventDefault();
     event.stopPropagation();
-    const pressed = cornerPressDown(lastPress.current, {
-      x: event.clientX,
-      y: event.clientY,
-      time: event.timeStamp,
-    });
+    const pressed = cornerPressDown(lastPress.current, { time: event.timeStamp });
     lastPress.current = pressed.last;
     if (pressed.reset) {
       // The second press only resets: it neither resizes nor saves a size.
@@ -459,18 +455,17 @@ export function BulletDialog({
   );
 }
 
-/** A press on the resize corner: where, and when (the event's timeStamp, in ms). */
-export type CornerPress = { x: number; y: number; time: number };
+/** A press on the resize corner: when it happened (the event's timeStamp, in ms). */
+export type CornerPress = { time: number };
 
 /** The longest time, in ms, between the two presses of a double press. */
 export const DOUBLE_PRESS_TIME = 300;
 
-/** The farthest apart, in pixels, the two presses of a double press can be. */
-export const DOUBLE_PRESS_DISTANCE = 10;
-
 /**
  * Whether `press` is the second half of a double press on the resize corner. Pointer events
  * work the same for a mouse, a finger and a pen, unlike dblclick, which phones may not send.
+ * Where the presses land isn't checked: both are on the small corner already, and two finger
+ * taps rarely land on the same spot.
  */
 export function isDoublePress(previous: CornerPress | null, press: CornerPress): boolean {
   if (previous === null) {
@@ -479,8 +474,7 @@ export function isDoublePress(previous: CornerPress | null, press: CornerPress):
   const elapsed = press.time - previous.time;
   return (
     elapsed >= 0 &&
-    elapsed <= DOUBLE_PRESS_TIME &&
-    Math.hypot(press.x - previous.x, press.y - previous.y) <= DOUBLE_PRESS_DISTANCE
+    elapsed <= DOUBLE_PRESS_TIME
   );
 }
 
