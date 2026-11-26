@@ -158,26 +158,32 @@ export function BulletSheet({
   const leftName = playerName(left, viewer, names);
   const rightName = playerName(right, viewer, names);
   const viewerName = playerName(viewer, viewer, names);
+  // The last deal's entries are written in another color, so they stand out from the
+  // earlier ones. score.last is what the last scored deal (or the current deal's прикуп)
+  // changed, the same record the «(+N)» beside each name uses.
   const mountain = (seat: number) =>
-    chainText(
+    chainParts(
       deals,
       (delta) => delta.mountain[seat] ?? 0,
       score.mountain[seat] ?? 0,
       false,
+      (score.last?.mountain[seat] ?? 0) !== 0,
     );
   const bullet = (seat: number) =>
-    chainText(
+    chainParts(
       deals,
       (delta) => delta.bullet[seat] ?? 0,
       score.bullet[seat] ?? 0,
       (score.bullet[seat] ?? 0) >= bulletTarget,
+      (score.last?.bullet[seat] ?? 0) !== 0,
     );
   const whist = (from: number, to: number) =>
-    chainText(
+    chainParts(
       deals,
       (delta) => delta.whists[from]?.[to] ?? 0,
       score.whists[from]?.[to] ?? 0,
       false,
+      (score.last?.whists[from]?.[to] ?? 0) !== 0,
     );
   const standing = (seat: number) =>
     standingParts(now[seat] ?? 0, (now[seat] ?? 0) - (then[seat] ?? 0));
@@ -317,7 +323,7 @@ export function BulletSheet({
           y={118}
           turn="left"
           kind="figure"
-          main={mountain(left)}
+          {...mountain(left)}
           fit={sideMountainRoom}
         />
         <PulkaEntry
@@ -325,7 +331,7 @@ export function BulletSheet({
           y={210}
           turn="left"
           kind="figure"
-          main={bullet(left)}
+          {...bullet(left)}
           fit={sideBulletRoom}
         />
         <PulkaEntry
@@ -333,7 +339,7 @@ export function BulletSheet({
           y={(topEdge + whistSplit) / 2}
           turn="left"
           kind="figure"
-          main={whist(left, right)}
+          {...whist(left, right)}
           fit={sideWhistUpperRoom}
         />
         <PulkaEntry
@@ -341,7 +347,7 @@ export function BulletSheet({
           y={(whistSplit + bottomEdge) / 2}
           turn="left"
           kind="figure"
-          main={whist(left, viewer)}
+          {...whist(left, viewer)}
           fit={sideWhistLowerRoom}
         />
         <PulkaEntry
@@ -357,7 +363,7 @@ export function BulletSheet({
           y={118}
           turn="right"
           kind="figure"
-          main={mountain(right)}
+          {...mountain(right)}
           fit={sideMountainRoom}
         />
         <PulkaEntry
@@ -365,7 +371,7 @@ export function BulletSheet({
           y={210}
           turn="right"
           kind="figure"
-          main={bullet(right)}
+          {...bullet(right)}
           fit={sideBulletRoom}
         />
         <PulkaEntry
@@ -373,7 +379,7 @@ export function BulletSheet({
           y={(topEdge + whistSplit) / 2}
           turn="right"
           kind="figure"
-          main={whist(right, left)}
+          {...whist(right, left)}
           fit={sideWhistUpperRoom}
         />
         <PulkaEntry
@@ -381,7 +387,7 @@ export function BulletSheet({
           y={(whistSplit + bottomEdge) / 2}
           turn="right"
           kind="figure"
-          main={whist(right, viewer)}
+          {...whist(right, viewer)}
           fit={sideWhistLowerRoom}
         />
         <PulkaEntry
@@ -397,7 +403,7 @@ export function BulletSheet({
           y={368}
           turn="none"
           kind="figure"
-          main={mountain(viewer)}
+          {...mountain(viewer)}
           fit={viewerMountainRoom}
         />
         <PulkaEntry
@@ -405,7 +411,7 @@ export function BulletSheet({
           y={(mountainBase + poolBase) / 2}
           turn="none"
           kind="figure"
-          main={bullet(viewer)}
+          {...bullet(viewer)}
           fit={viewerBulletRoom}
         />
         <PulkaEntry
@@ -413,7 +419,7 @@ export function BulletSheet({
           y={viewerWhistY}
           turn="none"
           kind="figure"
-          main={whist(viewer, left)}
+          {...whist(viewer, left)}
           fit={viewerWhistRoom}
         />
         <PulkaEntry
@@ -421,7 +427,7 @@ export function BulletSheet({
           y={viewerWhistY}
           turn="none"
           kind="figure"
-          main={whist(viewer, right)}
+          {...whist(viewer, right)}
           fit={viewerWhistRoom}
         />
       </svg>
@@ -446,6 +452,7 @@ export function PulkaEntry({
   turn,
   kind,
   main,
+  fresh = "",
   note = null,
   tone = null,
   fit,
@@ -455,11 +462,12 @@ export function PulkaEntry({
   turn: "left" | "right" | "none";
   kind: "name" | "figure";
   main: string;
+  fresh?: string;
   note?: string | null;
   tone?: number | null;
   fit?: number;
 }): React.JSX.Element | null {
-  if (main === "" && tone === null && note === null) {
+  if (main === "" && fresh === "" && tone === null && note === null) {
     return null;
   }
   const transform =
@@ -475,7 +483,7 @@ export function PulkaEntry({
       </tspan>
     );
   const fontSize =
-    kind === "figure" && fit !== undefined ? fitChain(main, fit) : undefined;
+    kind === "figure" && fit !== undefined ? fitChain(main + fresh, fit) : undefined;
   return (
     <text
       x={x}
@@ -487,6 +495,7 @@ export function PulkaEntry({
       transform={transform}
     >
       {main}
+      {fresh === "" ? null : <tspan className="pulka-fresh">{fresh}</tspan>}
       {tone === null ? null : (
         <tspan className={tone > 0 ? "pulka-plus" : "pulka-minus"}>
           {` ${signed(tone)}`}
@@ -627,6 +636,27 @@ export function chainText(
     return numbers.join(".");
   }
   return `${numbers.join(". ")} >>`;
+}
+
+/**
+ * A chain split for the sheet: `fresh` is the entry the last deal wrote, with the closing
+ * «>>» if that entry closed the пуля, and `main` is everything before it. Without a change
+ * in the last deal the whole chain is `main`.
+ */
+export function chainParts(
+  deals: readonly PlayedDeal[],
+  read: (delta: PlayedDeal["delta"]) => number,
+  current: number,
+  closed: boolean,
+  changed: boolean,
+): { main: string; fresh: string } {
+  const text = chainText(deals, read, current, closed);
+  const totals = fieldChain(deals, read, current);
+  if (!changed || totals.length === 0) {
+    return { main: text, fresh: "" };
+  }
+  const fresh = closed ? `${plain(current)} >>` : plain(current);
+  return { main: text.slice(0, text.length - fresh.length), fresh };
 }
 
 export function fitChain(text: string, room: number): number {

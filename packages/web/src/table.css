@@ -1406,6 +1406,10 @@ section.trick.trick-play {
   fill: #b42318;
 }
 
+.pulka-fresh {
+  fill: #1f5fbf;
+}
+
 .pulka-ink {
   fill: none;
   stroke: var(--green);
