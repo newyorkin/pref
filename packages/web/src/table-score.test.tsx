@@ -9,6 +9,7 @@ import {
   scoreOpenTalon,
   scoreSince,
   scoreTalonThrow,
+  settleBullet,
   type BulletScore,
   type GameAction,
   type GameState,
@@ -39,10 +40,12 @@ import {
   dealHeading,
   fitName,
   minPulkaSize,
+  playerStanding,
   pulkaCircle,
   pulkaFields,
   pulkaLines,
   resultsText,
+  standingText,
   unplayedNote,
   whistNotes,
   type PulkaField,
@@ -325,6 +328,53 @@ function chainLinesOf(markup: string): { text: string; size: number }[][] {
     })),
   );
 }
+
+describe("deal points in the results file", () => {
+  const quiet = [zeros(), zeros(), zeros()] as [
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+  ];
+
+  test("prices one mountain point at 10/3 and leaves the bullet out", () => {
+    const mountain = [0, 3, 6];
+    const points = [0, 1, 2].map((seat) => playerStanding(mountain, quiet, seat));
+    expect(points).toEqual([90, 0, -90]);
+    expect(points.map(standingText)).toEqual(["+30", "0", "−30"]);
+    expect(points.map((thirds) => thirds / 3)).toEqual(
+      settleBullet({ ...createBulletScore(), mountain: [0, 3, 6] }),
+    );
+
+    const rough = [0, 4, 6];
+    expect([0, 1, 2].map((seat) => standingText(playerStanding(rough, quiet, seat)))).toEqual([
+      "+33⅓",
+      "−6⅔",
+      "−26⅔",
+    ]);
+
+    const whists = [
+      [0, 0, 0],
+      [2, 0, 0],
+      [2, 0, 0],
+    ];
+    expect([0, 1, 2].map((seat) => standingText(playerStanding([2, 0, 0], whists, seat)))).toEqual([
+      "−17⅓",
+      "+8⅔",
+      "+8⅔",
+    ]);
+
+    const text = resultsText(names, [0, 0, 0], [
+      {
+        number: 1,
+        declarer: 0,
+        contract: "6 пик",
+        tricks: [6, 2, 2],
+        delta: { bullet: [2, 0, 0], mountain: zeros(), whists: quiet },
+      },
+    ]);
+    expect(text).toContain("Анна 0, Борис 0, Вера 0");
+  });
+});
 
 describe("results file", () => {
   test("names the whistlers and passers of each contract by place", () => {
