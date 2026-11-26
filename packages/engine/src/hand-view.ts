@@ -1,7 +1,16 @@
 import { type Seat, type Trump } from "./auction.js";
-import { type Card } from "./deck.js";
-import { firstLeader } from "./game-state.js";
+import { SUITS, type Card } from "./deck.js";
+import { currentHands, firstLeader } from "./game-state.js";
 import type { GameState } from "./game-types.js";
+
+function misereFacingCards(state: GameState, declarer: Seat): readonly Card[] {
+  const discarded =
+    state.talon?.declarer === declarer ? state.talon.discarded : [];
+  return [...currentHands(state)[declarer], ...discarded].sort((left, right) => {
+    const suit = SUITS.indexOf(left.suit) - SUITS.indexOf(right.suit);
+    return suit !== 0 ? suit : left.rank - right.rank;
+  });
+}
 
 export function lightPartners(
   state: GameState,
@@ -48,21 +57,27 @@ export function shownWhistHands(
     readonly Card[] | null,
   ];
   if (state.auctionResult?.type === "misere") {
+    const hands = [...hidden] as [
+      readonly Card[] | null,
+      readonly Card[] | null,
+      readonly Card[] | null,
+    ];
+    const declarer = state.auctionResult.declarer;
+    const facing =
+      state.phase === "discard" ||
+      state.phase === "order" ||
+      state.phase === "play";
+    if (facing && declarer !== viewer) {
+      hands[declarer] = misereFacingCards(state, declarer);
+    }
     if (state.phase === "play" && state.play !== null) {
-      const hands = [...hidden] as [
-        readonly Card[] | null,
-        readonly Card[] | null,
-        readonly Card[] | null,
-      ];
-      const declarer = state.auctionResult.declarer;
       for (const seat of [0, 1, 2] as const) {
         if (seat !== declarer && seat !== viewer) {
           hands[seat] = state.play.hands[seat];
         }
       }
-      return hands;
     }
-    return hidden;
+    return hands;
   }
   const partners = lightPartners(state);
   if (partners === null || state.play === null) {
