@@ -756,6 +756,11 @@ button.pc {
   transform: translateY(-0.75rem);
 }
 
+/* A card the server doesn't allow to play now: darker, with suit and rank still readable. */
+.pc-unplayable {
+  filter: brightness(0.62) saturate(0.75);
+}
+
 .pc-talon::after {
   content: "прикуп";
   position: absolute;
