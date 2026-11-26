@@ -50,6 +50,8 @@ jobs:
           push: true
           platforms: linux/amd64
           tags: git.yorkin.online/dan4eg/pref:test-${{ github.sha }}
+          build-args: |
+            PREF_REVISION=${{ github.sha }}
           labels: |
             org.opencontainers.image.revision=${{ github.sha }}
           cache-from: type=gha

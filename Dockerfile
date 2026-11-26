@@ -13,6 +13,11 @@ RUN pnpm install --frozen-lockfile
 
 COPY packages packages
 
+# Shown on the home page. .git is not in the image, so pass the commit:
+# docker build --build-arg PREF_REVISION=$(git rev-parse HEAD)
+ARG PREF_REVISION=dev
+ENV VITE_PREF_REVISION=$PREF_REVISION
+
 RUN pnpm --filter @pref/web build
 
 ENV HOST=0.0.0.0 \

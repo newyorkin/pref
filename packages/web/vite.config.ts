@@ -1,7 +1,25 @@
+import { execFileSync } from "node:child_process";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
+function prefRevision(): string {
+  const fromEnv = process.env.VITE_PREF_REVISION?.trim();
+  if (fromEnv) {
+    return fromEnv;
+  }
+  try {
+    return execFileSync("git", ["rev-parse", "HEAD"], {
+      encoding: "utf8",
+    }).trim();
+  } catch {
+    return "dev";
+  }
+}
+
 export default defineConfig({
+  define: {
+    __PREF_REVISION__: JSON.stringify(prefRevision()),
+  },
   plugins: [react()],
   server: {
     host: "0.0.0.0",

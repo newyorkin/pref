@@ -7,6 +7,7 @@ import {
 
 import { GameTable } from "./GameTable.js";
 import { DisplayProfileProvider, ProfileMenu } from "./profile.js";
+import { BuildStamp } from "./revision.js";
 import { EXIT_LABEL, PROGRESSION_LABEL, SettingsSummary } from "./table-rules.js";
 import "./auth.css";
 
@@ -897,6 +898,7 @@ export default function App(): React.JSX.Element {
         </div>
       ) : null}
       {screen}
+      {tableId === undefined ? <BuildStamp /> : null}
     </DisplayProfileProvider>
   );
 }
