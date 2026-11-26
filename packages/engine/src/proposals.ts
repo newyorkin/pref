@@ -98,17 +98,17 @@ export function offerProposal(
   if (!Number.isInteger(tricks) || tricks < floor || tricks > 10) {
     return reject(state, "invalidProposal");
   }
-  const declarer = state.auctionResult.declarer === seat;
+  const byDeclarer = state.auctionResult.declarer === seat;
   return accept({
     ...state,
     ...withSpeech(
       state,
       seat,
-      declarer ? `${tricks} запишем?` : `отдаём ${tricks}?`,
+      byDeclarer ? `${tricks} запишем?` : `отдаём ${tricks}?`,
       true,
     ),
     proposal: { tricks, proposer: seat, answers: [null, null, null] },
-    ...(declarer ? { declarerShown: true } : {}),
+    ...(byDeclarer ? { declarerShown: true } : {}),
   });
 }
 
