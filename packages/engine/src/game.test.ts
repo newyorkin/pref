@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 
 import { createAuction, type Seat, type Trump } from "./auction.js";
+import { dealDefense } from "./deal-result.js";
 import type { Card, Suit } from "./deck.js";
 import {
   applyGameAction,
@@ -1766,6 +1767,89 @@ describe("complete game state", () => {
       seat: 1,
       card: card("hearts", 7),
     });
+  });
+
+  test("the deal record names each defender's answer by place", () => {
+    const playOut = (start: GameState): GameState => {
+      let state = start;
+      for (let step = 0; step < 20 && state.phase === "play"; step += 1) {
+        const moves = ([0, 1, 2] as const).flatMap((seat) =>
+          gameView(state, seat).allowedActions.flatMap((action) =>
+            (action.type === "defense" && action.action.type === "light") ||
+            action.type === "playCard" ||
+            action.type === "propose" ||
+            (action.type === "proposal" && action.answer === "agree")
+              ? [{ seat, action }]
+              : [],
+          ),
+        );
+        const move =
+          moves.find(({ action }) => action.type === "defense") ??
+          moves.find(({ action }) => action.type === "playCard") ??
+          moves.find(({ action }) => action.type === "proposal") ??
+          moves.at(-1);
+        expect(move).toBeDefined();
+        state = act(state, move!.seat, move!.action);
+      }
+      expect(state.phase).not.toBe("play");
+      return state;
+    };
+
+    let single = orderedContract(6);
+    single = act(single, 1, { type: "defense", action: { type: "whist" } });
+    single = act(single, 2, { type: "defense", action: { type: "pass" } });
+    single = playOut(single);
+    expect(single.deals?.[0]?.defense).toEqual({
+      roles: [null, "whist", "pass"],
+      whistStyle: "light",
+    });
+
+    let both = orderedContract(6);
+    both = act(both, 1, { type: "defense", action: { type: "whist" } });
+    both = act(both, 2, { type: "defense", action: { type: "whist" } });
+    // Two whistlers can't close this two-card deal by proposal, so read the record directly.
+    expect(dealDefense(both)).toEqual({
+      roles: [null, "whist", "whist"],
+      whistStyle: null,
+    });
+
+    let passed = orderedContract(6);
+    passed = act(passed, 1, { type: "defense", action: { type: "pass" } });
+    passed = act(passed, 2, { type: "defense", action: { type: "pass" } });
+    expect(passed.deals?.[0]?.defense).toEqual({
+      roles: [null, "pass", "pass"],
+      whistStyle: null,
+    });
+
+    let half = orderedContract(6);
+    half = act(half, 1, { type: "defense", action: { type: "pass" } });
+    half = act(half, 2, { type: "defense", action: { type: "halfWhist" } });
+    half = act(half, 1, { type: "defense", action: { type: "pass" } });
+    expect(half.deals?.[0]?.defense).toEqual({
+      roles: [null, "pass", "halfWhist"],
+      whistStyle: null,
+    });
+
+    let returned = orderedContract(6);
+    returned = act(returned, 1, { type: "defense", action: { type: "pass" } });
+    returned = act(returned, 2, {
+      type: "defense",
+      action: { type: "halfWhist" },
+    });
+    returned = act(returned, 1, { type: "defense", action: { type: "whist" } });
+    returned = playOut(returned);
+    expect(returned.deals?.[0]?.defense).toEqual({
+      roles: [null, "whistBack", "halfWhist"],
+      whistStyle: "light",
+    });
+
+    const withoutThree = act(
+      orderedContract(6, 0, settings.raspasExit, "spades", false),
+      0,
+      { type: "withoutThree" },
+    );
+    expect(withoutThree.deals?.[0]?.contract).toContain("без трёх");
+    expect(withoutThree.deals?.[0]).not.toHaveProperty("defense");
   });
 
   test("an eight offers no half-whist", () => {

@@ -1,7 +1,12 @@
 import { type AuctionResult, type Seat } from "./auction.js";
 import { type Deal } from "./deck.js";
 import { rememberLayout, startDeal } from "./game-state.js";
-import type { GameState, PlayedDeal } from "./game-types.js";
+import type {
+  DealDefense,
+  DealDefenseRole,
+  GameState,
+  PlayedDeal,
+} from "./game-types.js";
 import {
   isBulletComplete,
   scoreDeal,
@@ -225,11 +230,45 @@ export function playedDeal(
       contract = `${contract}, ${notes.join(", ")}`;
     }
   }
+  const defense =
+    scoredDeal.type === "contract" && scoredDeal.withoutThree !== true
+      ? dealDefense(state)
+      : null;
   return {
     number: state.dealNumber + 1,
     declarer,
     contract,
     tricks: scoredDeal.tricks,
     delta: score.last,
+    ...(defense === null ? {} : { defense }),
+  };
+}
+
+/** Each defender's role by seat, so the record reads the same whoever looks at it. */
+export function dealDefense(state: GameState): DealDefense | null {
+  const defense = state.defense;
+  if (defense === null) {
+    return null;
+  }
+  const roles: [
+    DealDefenseRole | null,
+    DealDefenseRole | null,
+    DealDefenseRole | null,
+  ] = [null, null, null];
+  for (const seat of defense.defenders) {
+    const decision = defense.decisions[seat];
+    if (decision === null) {
+      return null;
+    }
+    roles[seat] =
+      seat === defense.halfWhistReturned
+        ? "halfWhist"
+        : decision === "whist" && defense.halfWhistReturned !== undefined
+          ? "whistBack"
+          : decision;
+  }
+  return {
+    roles,
+    whistStyle: defense.whistlers.length === 1 ? defense.whistStyle : null,
   };
 }
