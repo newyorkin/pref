@@ -168,6 +168,7 @@ export function gameTitle(
   result: AuctionSnapshot["result"],
   names: readonly (string | null)[] | null,
   viewer: number,
+  phase?: string,
 ): React.JSX.Element | null {
   if (result == null) {
     return null;
@@ -185,32 +186,92 @@ export function gameTitle(
   if (caption === null) {
     return null;
   }
+  // Until the заказ, the result is only the торговля's winning bid: the declarer may still order higher.
+  const ordering = phase === "discard" || phase === "order";
   const declarer =
     typeof result.declarer === "number"
       ? playerName(result.declarer, viewer, names)
       : null;
+  const shown =
+    typeof caption === "string" ? (
+      caption
+    ) : (
+      <>
+        {caption.level}{" "}
+        <span className={isRedSuit(caption.trump) ? "bid-red" : undefined}>
+          {suitSymbol(caption.trump)}
+        </span>
+      </>
+    );
   return (
     <header className="game-top">
-      <h1 className="game-title">
-        {typeof caption === "string" ? (
-          caption
-        ) : (
-          <>
-            {caption.level}{" "}
-            <span className={isRedSuit(caption.trump) ? "bid-red" : undefined}>
-              {suitSymbol(caption.trump)}
-            </span>
-          </>
-        )}
-      </h1>
+      {ordering ? (
+        <p className="game-bid">Торговля: {shown}</p>
+      ) : (
+        <h1 className="game-title">{shown}</h1>
+      )}
       {declarer === null ? null : (
         <p className="game-declarer">
           {typeof result.declarer === "number" && result.declarer === viewer
-            ? "Разыгрываете вы"
-            : `Разыгрывает ${declarer}`}
+            ? ordering
+              ? "Заказываете вы"
+              : "Разыгрываете вы"
+            : ordering
+              ? `Заказывает ${declarer}`
+              : `Разыгрывает ${declarer}`}
         </p>
       )}
     </header>
+  );
+}
+
+export function resultBid(result: AuctionSnapshot["result"]): AuctionBid | null {
+  if (result?.type === "misere") {
+    return { type: "misere" };
+  }
+  if (
+    result?.type === "contract" &&
+    result.level !== undefined &&
+    result.trump !== undefined
+  ) {
+    return { type: "contract", level: result.level, trump: result.trump };
+  }
+  return null;
+}
+
+/**
+ * The declarer's final заказ, once it is made. During снос and заказ the auction result is
+ * still the торговля's winning bid, so there is none yet.
+ */
+export function finalContract(
+  state: Pick<GameSnapshot, "phase" | "auction">,
+): { declarer: number; bid: AuctionBid } | null {
+  if (state.phase !== "defense" && state.phase !== "play") {
+    return null;
+  }
+  const declarer = state.auction.result?.declarer;
+  const bid = resultBid(state.auction.result);
+  return typeof declarer === "number" && bid !== null ? { declarer, bid } : null;
+}
+
+export function ContractBadge({ bid }: { bid: AuctionBid }): React.JSX.Element | null {
+  const caption = bidCaption(bid);
+  if (caption === null) {
+    return null;
+  }
+  return (
+    <span className="contract-badge" title={`Заказ: ${caption}`}>
+      {bid.type === "contract" && bid.level !== undefined && bid.trump !== undefined ? (
+        <>
+          {bid.level}{" "}
+          <span className={isRedSuit(bid.trump) ? "bid-red" : undefined}>
+            {suitSymbol(bid.trump)}
+          </span>
+        </>
+      ) : (
+        caption
+      )}
+    </span>
   );
 }
 

@@ -4,6 +4,7 @@ import {
   isAuctionPass,
   isMisereBid,
   isRedSuit,
+  resultBid,
   suitSymbol,
 } from "./table-utils.js";
 
@@ -130,20 +131,6 @@ export function OrderBoard({
       ) : null}
     </section>
   );
-}
-
-export function resultBid(result: AuctionSnapshot["result"]): AuctionBid | null {
-  if (result?.type === "misere") {
-    return { type: "misere" };
-  }
-  if (
-    result?.type === "contract" &&
-    result.level !== undefined &&
-    result.trump !== undefined
-  ) {
-    return { type: "contract", level: result.level, trump: result.trump };
-  }
-  return null;
 }
 
 export function LevelRow({

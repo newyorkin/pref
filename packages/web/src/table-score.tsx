@@ -1,7 +1,7 @@
 import { settleBullet, type BulletScore } from "@pref/engine";
 
-import type { GameSnapshot, PlayedDeal } from "./table-types.js";
-import { playerName } from "./table-utils.js";
+import type { AuctionBid, GameSnapshot, PlayedDeal } from "./table-types.js";
+import { ContractBadge, playerName } from "./table-utils.js";
 
 export function SeatTriangle({
   viewer,
@@ -10,6 +10,7 @@ export function SeatTriangle({
   names,
   tricks,
   turn,
+  contract = null,
 }: {
   viewer: number;
   left: number;
@@ -17,6 +18,7 @@ export function SeatTriangle({
   names: readonly (string | null)[] | null;
   tricks: readonly number[];
   turn: number | null;
+  contract?: { declarer: number; bid: AuctionBid } | null;
 }): React.JSX.Element {
   const corners = [
     { seat: left, place: "left" },
@@ -58,7 +60,12 @@ export function SeatTriangle({
               : `seat-corner seat-corner-${corner.place}`
           }
         >
-          <span>{playerName(corner.seat, viewer, names)}</span>
+          <span>
+            {playerName(corner.seat, viewer, names)}
+            {contract?.declarer === corner.seat ? (
+              <ContractBadge bid={contract.bid} />
+            ) : null}
+          </span>
           <strong>{tricks[corner.seat] ?? 0}</strong>
         </p>
       ))}

@@ -7,8 +7,9 @@ import {
 } from "./profile.js";
 
 import { SpeechWord } from "./table-speech.js";
-import type { Card, GameAction, GameSnapshot } from "./table-types.js";
+import type { AuctionBid, Card, GameAction, GameSnapshot } from "./table-types.js";
 import {
+  ContractBadge,
   cardsLabel,
   isRedSuit,
   playsFromCards,
@@ -37,6 +38,7 @@ export function Opponent({
   onAction,
   word,
   isTurn = false,
+  contract = null,
 }: {
   place: number;
   name: string | null;
@@ -48,6 +50,7 @@ export function Opponent({
   onAction: (action: GameAction) => void;
   word: string | undefined;
   isTurn?: boolean;
+  contract?: AuctionBid | null;
 }): React.JSX.Element {
   const profile = useDisplayProfile();
   const visible = sortHand(openCards, "asc", profile.suitOrder);
@@ -102,6 +105,7 @@ export function Opponent({
       )}
       <p className="opponent-name">
         {name ?? (empty ? "свободно" : `Место ${place + 1}`)}
+        {contract === null ? null : <ContractBadge bid={contract} />}
         {isTurn ? (
           <span className="opponent-turn" role="status">
             Ходит

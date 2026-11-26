@@ -24,6 +24,7 @@ import type {
 import {
   emptySeatMessage,
   facedTalonCaption,
+  finalContract,
   gameTitle,
   isRecord,
   nameAtSeat,
@@ -409,6 +410,7 @@ export function GameSnapshotPanel({
   const gap = emptySeatMessage(occupiedSeats, state.auction.turn);
   const spoken = wordsOnStep(state.speech, state.speechStep);
   const playTurn = state.phase === "play" ? state.turn : null;
+  const contract = finalContract(state);
 
   return (
     <main
@@ -461,7 +463,7 @@ export function GameSnapshotPanel({
 
       <DealLog log={speechEntries(state)} viewer={seat} names={playerNames} />
 
-      {gameTitle(state.auction.result, playerNames, seat)}
+      {gameTitle(state.auction.result, playerNames, seat, state.phase)}
 
       {state.handSizes === undefined ? null : (
         <section className="opponents">
@@ -480,6 +482,7 @@ export function GameSnapshotPanel({
             onAction={playNow}
             word={shownBubble(spoken.get(leftSeat), state.phase)}
             isTurn={playTurn === leftSeat}
+            contract={contract?.declarer === leftSeat ? contract.bid : null}
           />
           <Opponent
             place={rightSeat}
@@ -496,6 +499,7 @@ export function GameSnapshotPanel({
             onAction={playNow}
             word={shownBubble(spoken.get(rightSeat), state.phase)}
             isTurn={playTurn === rightSeat}
+            contract={contract?.declarer === rightSeat ? contract.bid : null}
           />
         </section>
       )}
@@ -541,6 +545,7 @@ export function GameSnapshotPanel({
           right={rightSeat}
           names={playerNames}
           tricks={state.tricksWon}
+          contract={contract}
           turn={
             typeof state.turn === "number"
               ? state.turn

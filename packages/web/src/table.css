@@ -97,6 +97,24 @@ body:has(.game-screen) {
   font-weight: 700;
 }
 
+.game-bid {
+  margin: 0;
+  color: #e7dcc6;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.contract-badge {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0 0.4rem;
+  border-radius: 0.4rem;
+  background: var(--paper);
+  color: var(--ink);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .game-title {
   margin: 0;
   font-family: "Iowan Old Style", Palatino, Georgia, serif;
@@ -1148,7 +1166,7 @@ section.trick.trick-play {
   pointer-events: none;
 }
 
-.seat-corner span {
+.seat-corner > span {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
