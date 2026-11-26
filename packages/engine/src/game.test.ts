@@ -2027,6 +2027,92 @@ describe("complete game state", () => {
     ]);
   });
 
+  test("the next card takes «не согласен» off the table, the log keeps it, and nothing carries over", () => {
+    const card = (suit: Suit, rank: Card["rank"]): Card => ({ suit, rank });
+    const wordsFor = (game: GameState): Record<number, string>[] =>
+      ([0, 1, 2] as const).map((seat) => {
+        const view = gameView(game, seat);
+        const words: Record<number, string> = {};
+        for (const item of view.speech) {
+          if (item.step === view.speechStep && item.seat !== null) {
+            words[item.seat] = item.word;
+          }
+        }
+        return words;
+      });
+    const refusals = (game: GameState, seat: Seat): number =>
+      gameView(game, seat).speech.filter((line) => line.word === "не согласен").length;
+    let state = orderedContract(6);
+    state = act(state, 1, { type: "defense", action: { type: "pass" } });
+    state = act(state, 2, { type: "defense", action: { type: "whist" } });
+
+    // The whistler refuses the declarer's offer.
+    state = act(state, 0, { type: "propose", tricks: 6 });
+    state = act(state, 2, { type: "proposal", answer: "decline" });
+    expect(wordsFor(state)).toEqual([
+      { 2: "не согласен" },
+      { 2: "не согласен" },
+      { 2: "не согласен" },
+    ]);
+    state = act(state, 0, { type: "playCard", card: card("spades", 14) });
+    expect(wordsFor(state)).toEqual([{}, {}, {}]);
+    for (const seat of [0, 1, 2] as const) {
+      expect(refusals(state, seat)).toBe(1);
+    }
+    state = act(state, 2, { type: "defense", action: { type: "light" } });
+
+    // The passer refuses the whistler's offer; the whistler plays the passer's open hand.
+    state = act(state, 2, { type: "propose", tricks: 4 });
+    state = act(state, 1, { type: "proposal", answer: "decline" });
+    expect(wordsFor(state)).toEqual([
+      { 1: "не согласен" },
+      { 1: "не согласен" },
+      { 1: "не согласен" },
+    ]);
+    state = act(state, 2, { type: "playCard", card: card("hearts", 7) });
+    expect(wordsFor(state)).toEqual([{}, {}, {}]);
+
+    // The declarer refuses, and a new offer shows only its own words.
+    state = act(state, 2, { type: "propose", tricks: 4 });
+    state = act(state, 0, { type: "proposal", answer: "decline" });
+    expect(wordsFor(state)).toEqual([
+      { 0: "не согласен" },
+      { 0: "не согласен" },
+      { 0: "не согласен" },
+    ]);
+    state = act(state, 2, { type: "propose", tricks: 4 });
+    expect(wordsFor(state)).toEqual([
+      { 2: "отдаём 4?" },
+      { 2: "отдаём 4?" },
+      { 2: "отдаём 4?" },
+    ]);
+    state = act(state, 1, { type: "proposal", answer: "decline" });
+    for (const seat of [0, 1, 2] as const) {
+      expect(refusals(state, seat)).toBe(4);
+    }
+    state = act(state, 2, { type: "playCard", card: card("spades", 13) });
+    expect(wordsFor(state)).toEqual([{}, {}, {}]);
+
+    // Refusals from this deal don't reach the next one.
+    state = act(state, 0, { type: "propose", tricks: 6 });
+    state = act(state, 1, { type: "proposal", answer: "decline" });
+    state = act(state, 0, { type: "propose", tricks: 6 });
+    state = act(state, 1, { type: "proposal", answer: "agree" });
+    state = act(state, 2, { type: "proposal", answer: "agree" });
+    expect(state.phase).toBe("auction");
+    expect(state.dealNumber).toBe(1);
+    expect(wordsFor(state)).toEqual([{}, {}, {}]);
+    expect(
+      state.speechLog?.[0]?.lines.filter((line) => line.word === "не согласен"),
+    ).toEqual([
+      expect.objectContaining({ seat: 2 }),
+      expect.objectContaining({ seat: 1 }),
+      expect.objectContaining({ seat: 0 }),
+      expect.objectContaining({ seat: 1 }),
+      expect.objectContaining({ seat: 1 }),
+    ]);
+  });
+
   test("a misere declarer's proposal opens his cards to both defenders", () => {
     const card = (suit: Suit, rank: Card["rank"]): Card => ({ suit, rank });
     const talon = [card("spades", 7), card("spades", 8)] as const;
@@ -2084,6 +2170,81 @@ describe("complete game state", () => {
     }
   });
 
+  test("on a мизер too, the next card takes «не согласен» off the table and the log keeps it", () => {
+    const card = (suit: Suit, rank: Card["rank"]): Card => ({ suit, rank });
+    const talon = [card("spades", 7), card("spades", 8)] as const;
+    let state: GameState = {
+      settings: { ...settings, bulletTarget: 10 },
+      phase: "auction",
+      seed: 1,
+      dealNumber: 0,
+      raspasIndex: 0,
+      score: createBulletScore(),
+      dealtCards: {
+        hands: [
+          [card("hearts", 9), card("clubs", 9)],
+          [card("diamonds", 8), card("clubs", 10)],
+          [card("clubs", 7), card("diamonds", 7)],
+        ],
+        talon,
+      },
+      auction: createAuction(0),
+      auctionResult: null,
+      talon: null,
+      defense: null,
+      play: null,
+    };
+    state = act(state, 0, {
+      type: "auction",
+      action: { type: "bid", bid: { type: "misere" } },
+    });
+    state = act(state, 1, { type: "auction", action: { type: "pass" } });
+    state = act(state, 2, { type: "auction", action: { type: "pass" } });
+    state = act(state, 0, { type: "discard", cards: [...talon] });
+    state = confirmOrder(state);
+    const wordsFor = (game: GameState): Record<number, string>[] =>
+      ([0, 1, 2] as const).map((seat) => {
+        const view = gameView(game, seat);
+        const words: Record<number, string> = {};
+        for (const item of view.speech) {
+          if (item.step === view.speechStep && item.seat !== null) {
+            words[item.seat] = item.word;
+          }
+        }
+        return words;
+      });
+
+    // The мизерящий refuses a ловящий's «отдаём 0?».
+    state = act(state, 1, { type: "propose", tricks: 0 });
+    state = act(state, 0, { type: "proposal", answer: "decline" });
+    expect(wordsFor(state)).toEqual([
+      { 0: "не согласен" },
+      { 0: "не согласен" },
+      { 0: "не согласен" },
+    ]);
+    state = act(state, 0, { type: "playCard", card: card("hearts", 9) });
+    expect(wordsFor(state)).toEqual([{}, {}, {}]);
+
+    // A ловящий refuses the мизерящий's «0 запишем?».
+    state = act(state, 0, { type: "propose", tricks: 0 });
+    state = act(state, 1, { type: "proposal", answer: "decline" });
+    expect(wordsFor(state)).toEqual([
+      { 1: "не согласен" },
+      { 1: "не согласен" },
+      { 1: "не согласен" },
+    ]);
+    state = act(state, 1, { type: "playCard", card: card("diamonds", 8) });
+    expect(wordsFor(state)).toEqual([{}, {}, {}]);
+    for (const seat of [0, 1, 2] as const) {
+      expect(
+        gameView(state, seat).speech.filter((line) => line.word === "не согласен"),
+      ).toEqual([
+        expect.objectContaining({ seat: 0 }),
+        expect.objectContaining({ seat: 1 }),
+      ]);
+    }
+  });
+
   test("the proposer can cancel his offer, even after one answer, and the play goes on", () => {
     const card = (suit: Suit, rank: Card["rank"]): Card => ({ suit, rank });
     let state = orderedContract(6);
@@ -2137,8 +2298,23 @@ describe("complete game state", () => {
     expect(
       gameView(state, 0).allowedActions.some((action) => action.type === "playCard"),
     ).toBe(true);
+    for (const seat of [0, 1, 2] as const) {
+      const view = gameView(state, seat);
+      expect(
+        view.speech.filter((line) => line.step === view.speechStep && line.seat !== null),
+      ).toEqual([expect.objectContaining({ seat: 0, word: "отменяю" })]);
+    }
+
+    // The next card takes «отменяю» off the table for everyone; the log keeps it.
     state = act(state, 0, { type: "playCard", card: card("spades", 14) });
     expect(state.play?.currentTrick).toHaveLength(1);
+    for (const seat of [0, 1, 2] as const) {
+      const view = gameView(state, seat);
+      expect(
+        view.speech.filter((line) => line.step === view.speechStep && line.seat !== null),
+      ).toEqual([]);
+      expect(view.speech.filter((line) => line.word === "отменяю")).toHaveLength(3);
+    }
   });
 
   test("cancelling after the last answer is too late", () => {
