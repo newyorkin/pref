@@ -7,7 +7,7 @@
 ## Возможности
 
 - Регистрация, вход и создание стола со ссылкой-приглашением.
-- Согласование договорённостей перед первой сдачей.
+- Согласование договорённостей перед первой сдачей. Во время партии кнопка «Договорённости» показывает их любому игроку без возможности изменить.
 - Контракты от шестерной до десятерной, игры без козыря, мизер и распасы.
 - Вист в светлую и в тёмную, полвиста и уход без трёх.
 - Пуля, гора, висты, история сдач и выгрузка результатов в текстовый файл.
@@ -316,7 +316,7 @@ pnpm --filter @pref/web build
 
 - Движок: `game.ts` — переходы, `game-state.ts` — создание состояния, `deal-result.ts` — результат сдачи, `proposals.ts` — предложения, `speech.ts` — речь, `hand-view.ts` — видимость карт.
 - Сервер: `auth.ts`, `db.ts`, `lobby.ts`, `tables.ts`, `ws.ts`, `static.ts`, `validation.ts`, `protocol.ts`.
-- Интерфейс: `GameTable.tsx` связывает компоненты `table-auction`, `table-cards`, `table-hand`, `table-trick`, `table-talon`, `table-actions`, `table-score`, `table-layout` и `table-speech`. Экспорты прежнего модуля сохранены.
+- Интерфейс: `GameTable.tsx` связывает компоненты `table-auction`, `table-cards`, `table-hand`, `table-trick`, `table-talon`, `table-actions`, `table-score`, `table-layout`, `table-rules` и `table-speech`. Экспорты прежнего модуля сохранены.
 
 Оценка новых функций без их реализации — в [плане P3](docs/roadmap.md).
 
