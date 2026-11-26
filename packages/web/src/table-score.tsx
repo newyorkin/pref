@@ -716,13 +716,31 @@ export function poolEdge(values: readonly number[], seat: number): number {
   return total;
 }
 
+/**
+ * Deal points in thirds of a whist. Whists count whole, so one whist is 3.
+ * One unit of the mountain edge `2mi − mj − mk` is worth 10/3 of a whist, which is
+ * the same as `10(m̄ − mi)` in the final settlement. The bullet is not converted.
+ */
 export function playerStanding(
-  bullet: readonly number[],
   mountain: readonly number[],
   whists: readonly (readonly number[])[],
   seat: number,
 ): number {
-  return netWhist(whists, seat) + poolEdge(bullet, seat) - poolEdge(mountain, seat);
+  return netWhist(whists, seat) * 3 - poolEdge(mountain, seat) * 10;
+}
+
+/** Renders a {@link playerStanding} value, kept in thirds so 10/3 stays exact. */
+export function standingText(thirds: number): string {
+  if (thirds === 0) {
+    return "0";
+  }
+  const negative = thirds < 0;
+  const abs = Math.abs(thirds);
+  const whole = Math.trunc(abs / 3);
+  const rest = abs % 3;
+  const fraction = rest === 1 ? "⅓" : rest === 2 ? "⅔" : "";
+  const body = `${whole === 0 ? "" : String(whole)}${fraction}`;
+  return `${negative ? "−" : "+"}${body}`;
 }
 
 export function standingParts(
@@ -818,13 +836,8 @@ export function dealLine(deal: PlayedDeal, names: readonly string[]): string {
   const points = names
     .map(
       (name, seat) =>
-        `${name} ${signed(
-          playerStanding(
-            deal.delta.bullet,
-            deal.delta.mountain,
-            deal.delta.whists,
-            seat,
-          ),
+        `${name} ${standingText(
+          playerStanding(deal.delta.mountain, deal.delta.whists, seat),
         )}`,
     )
     .join(", ");
