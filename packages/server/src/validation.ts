@@ -65,7 +65,11 @@ export function isGameAction(value: unknown): value is GameAction {
   if (value.type === "playCard") {
     return isCard(value.card);
   }
-  if (value.type === "throwTalon" || value.type === "withoutThree") {
+  if (
+    value.type === "throwTalon" ||
+    value.type === "withoutThree" ||
+    value.type === "cancelProposal"
+  ) {
     return true;
   }
   if (value.type === "propose") {

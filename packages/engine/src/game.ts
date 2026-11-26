@@ -48,6 +48,7 @@ import {
 } from "./hand-view.js";
 import {
   answerProposal,
+  cancelProposal,
   offerProposal,
   proposalOffers,
   proposalReplies,
@@ -376,6 +377,9 @@ export function applyGameAction(
   }
 
   if (state.phase === "play" && state.proposal != null) {
+    if (action.type === "cancelProposal") {
+      return cancelProposal(state, seat);
+    }
     if (action.type !== "proposal") {
       return reject(state, "invalidPhase");
     }

@@ -11,18 +11,21 @@ export interface TestTable {
   snapshots: [SnapshotEnvelope, SnapshotEnvelope, SnapshotEnvelope];
 }
 
+// Seats that must act; the proposer can only take his offer back while the others answer.
+function mustAct(snapshot: SnapshotEnvelope | undefined): boolean {
+  return (
+    snapshot?.state.allowedActions.some(
+      (action) => action.type !== "cancelProposal",
+    ) === true
+  );
+}
+
 // Prefer the actual turn; proposal replies and other phases may offer several seats.
 export function actingSeat(table: TestTable): number | null {
   const turn = table.snapshots[0].state.turn;
-  if (
-    turn !== null &&
-    turn !== undefined &&
-    table.snapshots[turn]?.state.allowedActions.length
-  )
+  if (turn !== null && turn !== undefined && mustAct(table.snapshots[turn]))
     return turn;
-  const seat = table.snapshots.findIndex(
-    (snapshot) => snapshot.state.allowedActions.length > 0,
-  );
+  const seat = table.snapshots.findIndex(mustAct);
   return seat < 0 ? null : seat;
 }
 

@@ -29,3 +29,12 @@ test("who acts handles auction, talon and proposal replies without a turn", () =
 test("who acts is unavailable when no player has an action", () => {
   expect(actingSeat(table(null, []))).toBeNull();
 });
+
+test("who acts skips the proposer, who can only cancel while the others answer", () => {
+  const waiting = table(0, [1, 2]);
+  waiting.snapshots[0].state.allowedActions = [{ type: "cancelProposal" }];
+  expect(actingSeat(waiting)).toBe(1);
+  waiting.snapshots[1].state.allowedActions = [];
+  waiting.snapshots[2].state.allowedActions = [];
+  expect(actingSeat(waiting)).toBeNull();
+});

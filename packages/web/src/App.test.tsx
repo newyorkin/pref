@@ -2105,6 +2105,35 @@ describe("display profile", () => {
     expect(reply).toContain("Анна: 6 запишем?");
     expect(reply).toContain("Борис: согласен");
     expect(reply).toContain('aria-label="К ♥"');
+
+    const waiting = panel(0, {
+      ...base,
+      speechStep: 5,
+      speech: [
+        { seat: 0, word: "6 запишем?", step: 5 },
+        { seat: 1, word: "согласен", step: 5 },
+      ],
+      allowedActions: [{ type: "cancelProposal" }],
+    });
+    expect(waiting).toContain(">Отменить предложение</button>");
+    expect(waiting).not.toContain(">Согласен</button>");
+    expect(waiting).not.toContain(">Моих</summary>");
+
+    const cancelled = panel(2, {
+      ...base,
+      hand: [],
+      speechStep: 6,
+      speech: [
+        { seat: 0, word: "6 запишем?", step: 5 },
+        { seat: 1, word: "согласен", step: 5 },
+        { seat: 0, word: "отменяю", step: 6 },
+      ],
+      allowedActions: [],
+    });
+    expect(cancelled).not.toContain(">Согласен</button>");
+    expect(cancelled).not.toContain(">Отменить предложение</button>");
+    expect(cancelled).toContain('class="speech-bubble">отменяю');
+    expect(cancelled).not.toContain('class="speech-bubble">согласен');
   });
 
   test("leaves the mobile card size untouched", () => {

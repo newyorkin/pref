@@ -366,6 +366,9 @@ export function actionLabel(action: GameAction): string {
   if (action.type === "proposal") {
     return action.answer === "agree" ? "Согласен" : "Не согласен";
   }
+  if (action.type === "cancelProposal") {
+    return "Отменить предложение";
+  }
   if (action.type === "throwTalon") {
     return "Бросить прикуп в лицо";
   }

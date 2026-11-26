@@ -371,7 +371,7 @@ export function GameSnapshotPanel({
     (action) => action.type === "propose" && action.tricks !== undefined,
   );
   const proposalReplies = state.allowedActions.filter(
-    (action) => action.type === "proposal",
+    (action) => action.type === "proposal" || action.type === "cancelProposal",
   );
   const halfWhistOpen = state.allowedActions.some(
     (action) => action.type === "defense" && action.action?.type === "halfWhist",
@@ -389,7 +389,8 @@ export function GameSnapshotPanel({
       action.type !== "discard" &&
       action.type !== "throwTalon" &&
       action.type !== "propose" &&
-      action.type !== "proposal"
+      action.type !== "proposal" &&
+      action.type !== "cancelProposal"
     );
   });
   const trump = state.trump ?? null;

@@ -1201,6 +1201,120 @@ describe("game server", () => {
     }
   });
 
+  test("a cancelled proposal clears every seat, loses the race to a stale answer and survives a reconnect", async () => {
+    const server = createGameServer();
+    server.addTable("proposal-cancel", defenseTable(6));
+    await server.listen();
+    const sessions = await Promise.all([
+      registerAndLogin(server.httpUrl(), "cancel-0"),
+      registerAndLogin(server.httpUrl(), "cancel-1"),
+      registerAndLogin(server.httpUrl(), "cancel-2"),
+    ]);
+    const clients: Array<{
+      socket: WebSocket;
+      inbox: MessageInbox;
+      snapshot: SnapshotMessage & { state: GameSeatView };
+    }> = [];
+    let actionNumber = 0;
+    const join = async (seat: number) => {
+      const client = await connect(server.url(), sessions[seat].cookie);
+      client.socket.send(
+        JSON.stringify({ type: "join", tableId: "proposal-cancel", seat }),
+      );
+      return { ...client, snapshot: asGameSnapshot(await client.inbox.next()) };
+    };
+    const command = (seat: 0 | 1 | 2, action: GameAction): GameActionCommand => ({
+      tableId: "proposal-cancel",
+      seat,
+      actionId: `cancel-${actionNumber++}`,
+      expectedVersion: clients[seat].snapshot.version,
+      type: "gameAction",
+      payload: { action },
+    });
+    async function send(seat: 0 | 1 | 2, action: GameAction): Promise<void> {
+      clients[seat].socket.send(JSON.stringify(command(seat, action)));
+      const snapshots = await Promise.all(
+        clients.map((client) => client.inbox.next()),
+      );
+      snapshots.forEach((snapshot, index) => {
+        clients[index].snapshot = asGameSnapshot(snapshot);
+      });
+    }
+    const replies = (seat: number) =>
+      clients[seat].snapshot.state.allowedActions.filter(
+        (action) => action.type === "proposal" || action.type === "cancelProposal",
+      );
+
+    try {
+      for (const seat of [0, 1, 2]) {
+        clients.push(await join(seat));
+      }
+      await send(1, { type: "defense", action: { type: "pass" } });
+      await send(2, { type: "defense", action: { type: "whist" } });
+      await send(0, { type: "propose", tricks: 6 });
+      await send(1, { type: "proposal", answer: "agree" });
+      expect(replies(0)).toEqual([{ type: "cancelProposal" }]);
+      expect(replies(2)).toHaveLength(2);
+
+      const foreign = command(2, { type: "cancelProposal" });
+      clients[2].socket.send(JSON.stringify(foreign));
+      expect(await clients[2].inbox.next()).toMatchObject({
+        type: "rejected",
+        reason: "notYourTurn",
+      });
+
+      // The last answer was sent against the version before the cancel.
+      const stale = command(2, { type: "proposal", answer: "agree" });
+      await send(0, { type: "cancelProposal" });
+      for (const seat of [0, 1, 2]) {
+        expect(replies(seat)).toEqual([]);
+        expect(clients[seat].snapshot.state.phase).toBe("play");
+      }
+      clients[2].socket.send(JSON.stringify(stale));
+      expect(await clients[2].inbox.next()).toMatchObject({
+        type: "rejected",
+        reason: "versionMismatch",
+      });
+      const fresh = command(2, { type: "proposal", answer: "agree" });
+      clients[2].socket.send(JSON.stringify(fresh));
+      expect(await clients[2].inbox.next()).toMatchObject({
+        type: "rejected",
+        reason: "invalidPhase",
+      });
+      expect(server.getTable("proposal-cancel")?.version).toBe(
+        clients[0].snapshot.version,
+      );
+      expect(clients[0].snapshot.state.score.bullet).toEqual([0, 0, 0]);
+
+      clients[1].socket.terminate();
+      clients[1] = await join(1);
+      expect(clients[1].snapshot.version).toBe(clients[0].snapshot.version);
+      expect(replies(1)).toEqual([]);
+      expect(clients[1].snapshot.state.phase).toBe("play");
+
+      // After the deal is written, the proposer can no longer cancel.
+      await send(0, { type: "propose", tricks: 6 });
+      await send(1, { type: "proposal", answer: "agree" });
+      const late = command(0, { type: "cancelProposal" });
+      await send(2, { type: "proposal", answer: "agree" });
+      expect(clients[0].snapshot.state.phase).toBe("auction");
+      clients[0].socket.send(JSON.stringify(late));
+      expect(await clients[0].inbox.next()).toMatchObject({
+        type: "rejected",
+        reason: "versionMismatch",
+      });
+      const after = command(0, { type: "cancelProposal" });
+      clients[0].socket.send(JSON.stringify(after));
+      expect(await clients[0].inbox.next()).toMatchObject({ type: "rejected" });
+      expect(clients[0].snapshot.state.deals[0]?.tricks).toEqual([6, 0, 4]);
+    } finally {
+      for (const client of clients) {
+        client.socket.terminate();
+      }
+      await server.close();
+    }
+  });
+
   test("serves the client build and the table page from the same port", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "pref-static-"));
     await writeFile(
