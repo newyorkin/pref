@@ -200,6 +200,7 @@ body:has(.game-screen) {
 }
 
 .turn-indicator,
+.proposal-status,
 .opponent-turn {
   border: 1px solid #e4d193;
   border-radius: 0.5rem;
@@ -208,7 +209,8 @@ body:has(.game-screen) {
   font-weight: 700;
 }
 
-.turn-indicator {
+.turn-indicator,
+.proposal-status {
   position: fixed;
   right: 1rem;
   bottom: calc(var(--table-foot) + 0.5rem);
