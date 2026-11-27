@@ -2170,8 +2170,14 @@ describe("display profile", () => {
     expect(css).toContain("opacity: 0.92");
   });
 
-  test("shrinks the card faces in «Ваш снос» with its small cards", () => {
-    const css = readFileSync(new URL("./table.css", import.meta.url), "utf8");
+  test.each([
+    ["LF", "\n"],
+    ["CRLF", "\r\n"],
+  ])("shrinks the card faces in «Ваш снос» with its small cards (%s)", (_name, ending) => {
+    const source = readFileSync(new URL("./table.css", import.meta.url), "utf8");
+    // Exercise the same assertions for either checkout format, then parse uniform CSS text.
+    const input = source.replace(/\r?\n/g, ending);
+    const css = input.replace(/\r\n/g, "\n");
     // The first rule whose selector starts its line, so ".pc" doesn't find ".opponent-cards .pc".
     const rule = (selector: string, from = css) => {
       const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\n/g, "\\n\\s*");
