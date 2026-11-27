@@ -1,6 +1,13 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, test } from "vitest";
-import { CurrentTrick, finishedTrickDisplay, LastTrickCards } from "./table-trick.js";
+import {
+  CurrentTrick,
+  emptyTableClick,
+  finishedTrickDisplay,
+  LastTrickCards,
+  shownTrick,
+  TABLE_CONTROLS,
+} from "./table-trick.js";
 import { Talon } from "./table-talon.js";
 import type { GameSnapshot } from "./table-types.js";
 
@@ -197,5 +204,56 @@ describe("last trick by seat", () => {
     expect(placed.me).toBe(labels[viewer]);
     expect(placed.left).toBe(labels[(viewer + 1) % 3]);
     expect(placed.right).toBe(labels[(viewer + 2) % 3]);
+  });
+});
+
+describe("click on an empty table during the trick pause", () => {
+  // Клик попадает в элемент, у которого среди предков есть перечисленные селекторы.
+  function target(...ancestors: string[]) {
+    const controls = TABLE_CONTROLS.split(", ");
+    return {
+      closest: (selector: string) => {
+        expect(selector).toBe(TABLE_CONTROLS);
+        return ancestors.find((item) => controls.includes(item)) ?? null;
+      },
+    };
+  }
+
+  test("hides the held trick on a click on the empty table", () => {
+    expect(emptyTableClick(target(), true)).toBe(true);
+    expect(emptyTableClick(target(".table-play", ".trick"), true)).toBe(true);
+  });
+
+  test("does nothing outside the pause", () => {
+    expect(emptyTableClick(target(), false)).toBe(false);
+    expect(emptyTableClick(null, true)).toBe(false);
+  });
+
+  test.each([
+    "button",
+    ".game-hand",
+    ".deal-log",
+    ".trick-dock",
+    "details",
+    "summary",
+    ".corner-tools",
+    ".bullet-backdrop",
+    "[role='dialog']",
+  ])("keeps the trick on a click inside %s", (control) => {
+    expect(emptyTableClick(target(control), true)).toBe(false);
+  });
+
+  const lead = { suit: "clubs", rank: 10 };
+  const next = [{ seat: 1, card: { suit: "clubs", rank: 11 } }];
+
+  test("an opponent's card stays hidden while the trick is held", () => {
+    expect(shownTrick(cards, null, next, 0)).toEqual(cards);
+    expect(shownTrick(null, null, next, 0)).toEqual(next);
+  });
+
+  test("the player's own card replaces the held trick", () => {
+    // playNow сбрасывает взятку и запоминает свою карту до ответа сервера.
+    expect(shownTrick(null, lead, [], 0)).toEqual([{ seat: 0, card: lead }]);
+    expect(shownTrick(null, lead, next, 0)).toEqual(next);
   });
 });
