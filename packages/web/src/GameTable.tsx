@@ -412,6 +412,9 @@ export function GameSnapshotPanel({
   const gap = emptySeatMessage(occupiedSeats, state.auction.turn);
   const spoken = wordsOnStep(state.speech, state.speechStep);
   const playTurn = state.phase === "play" ? state.turn : null;
+  const proposalMessage = state.proposal == null ? null
+    : state.proposal.proposer === seat ? "Ждём ответов"
+      : state.proposal.answers[seat] === null ? "Ваш ответ" : "Ответ принят";
   const contract = finalContract(state);
 
   return (
@@ -572,6 +575,7 @@ export function GameSnapshotPanel({
       </aside>
 
       {playTurn === seat ? <p className="turn-indicator" role="status">Ваш ход</p> : null}
+      {proposalMessage === null ? null : <p className="proposal-status" role="status">{proposalMessage}</p>}
       <div className="hand-seat">
         <ActionPanel
           state={state}

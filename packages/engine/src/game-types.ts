@@ -131,6 +131,7 @@ export type GameTransition =
     };
 
 export interface GameSeatView {
+  readonly proposal: Proposal | null;
   readonly phase: GamePhase;
   readonly hand: readonly Card[];
   readonly handSizes: readonly [number, number, number];

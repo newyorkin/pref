@@ -37,6 +37,15 @@ export interface AuctionSnapshot {
 }
 
 export interface GameSnapshot {
+  proposal?: {
+    tricks: number;
+    proposer: number;
+    answers: [
+      "agree" | "decline" | null,
+      "agree" | "decline" | null,
+      "agree" | "decline" | null,
+    ];
+  } | null;
   phase: string;
   hand: Card[];
   handSizes?: [number, number, number];

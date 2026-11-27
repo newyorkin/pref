@@ -140,6 +140,7 @@ export function gameTurn(state: GameState): Seat | null {
     return state.defense?.turn ?? null;
   }
   if (state.phase === "play") {
+    if (state.proposal != null) return null;
     if (styleChoiceDue(state)) {
       return state.defense?.whistlers[0] ?? null;
     }

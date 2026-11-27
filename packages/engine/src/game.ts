@@ -447,6 +447,7 @@ export function gameView(state: GameState, seat: Seat): GameSeatView {
   const playView = state.play === null ? null : trickView(state.play, seat);
 
   return {
+    proposal: state.proposal ?? null,
     phase: state.phase,
     hand,
     handSizes: currentHands(state).map((cards) => cards.length) as [
