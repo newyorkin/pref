@@ -1250,14 +1250,6 @@ section.trick.trick-play {
   bottom: calc(var(--table-foot) + 0.5rem + var(--own-contract-lift));
 }
 
-/* The open «Последняя взятка» fills the dock up to the hand, so «Ваш ход» moves to its left.
-   On a phone the лог sits there instead. */
-@media (min-width: 641px) {
-  .game-screen:has(.last-trick[open]) .turn-indicator {
-    right: calc(var(--trick-dock-w) + 1.25rem);
-  }
-}
-
 .seat-corner > span > .contract-badge {
   margin-left: 0.4rem;
 }
@@ -1889,6 +1881,12 @@ section.trick.trick-play {
 }
 
 @media (min-width: 641px) {
+  /* The open «Последняя взятка» fills the dock up to the hand, so «Ваш ход» moves to its left.
+     On a phone the лог sits there instead. */
+  .game-screen:has(.last-trick[open]) .turn-indicator {
+    right: calc(var(--trick-dock-w) + 1.25rem);
+  }
+
   .discard-pile {
     --snos-scale: var(--card-scale, 1);
   }
