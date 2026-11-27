@@ -567,6 +567,44 @@ describe("bullet scoring", () => {
     expect(score.whists[0][1]).toBe(0);
   });
 
+  describe("with every пуля full, the rest comes off the earner's гора first", () => {
+    const tenAfterFull = (mountain: [number, number, number]) =>
+      scoreDeal(
+        { ...createBulletScore(), bullet: [20, 20, 20], mountain },
+        { type: "contract", declarer: 0, level: 10, tricks: [10, 0, 0], whistlers: [] },
+        20,
+      );
+
+    test("a гора larger than the rest only goes down", () => {
+      const score = tenAfterFull([14, 3, 0]);
+      expect(score.mountain).toEqual([4, 3, 0]);
+      expect(score.last.mountain).toEqual([-10, 0, 0]);
+    });
+
+    test("a гора equal to the rest goes to zero and the others write nothing", () => {
+      const score = tenAfterFull([10, 3, 0]);
+      expect(score.mountain).toEqual([0, 3, 0]);
+      expect(score.last.mountain).toEqual([-10, 0, 0]);
+    });
+
+    test("a гора smaller than the rest goes to zero and the others write only the part left", () => {
+      const score = tenAfterFull([8, 0, 0]);
+      expect(score.mountain).toEqual([0, 2, 2]);
+      expect(score.last.mountain).toEqual([-8, 2, 2]);
+      expect(score.whists).toEqual([
+        [0, 0, 0],
+        [0, 0, 0],
+        [0, 0, 0],
+      ]);
+    });
+
+    test("a zero гора stays zero and the others write the whole rest", () => {
+      const score = tenAfterFull([0, 5, 1]);
+      expect(score.mountain).toEqual([0, 15, 11]);
+      expect(score.last.mountain).toEqual([0, 10, 10]);
+    });
+  });
+
   test("two whist tricks on an eight write whists and no mountain", () => {
     const score = scoreDeal(createBulletScore(), {
       type: "contract",
