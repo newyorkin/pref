@@ -1,11 +1,49 @@
 import { PlayingCard } from "./table-cards.js";
 import { finishedTrick } from "./profile.js";
-import type { GameSnapshot } from "./table-types.js";
+import type { Card, GameSnapshot } from "./table-types.js";
 
 export function finishedTrickDisplay(previous: GameSnapshot, next: GameSnapshot) {
   if (previous.dealNumber !== next.dealNumber) return null;
   const cards = finishedTrick(previous, next);
   return cards === null ? null : { cards, prikup: previous.prikup ?? [] };
+}
+
+// Элементы, клик по которым — действие, а не клик по пустому месту стола.
+export const TABLE_CONTROLS = [
+  "button",
+  "a",
+  "input",
+  "select",
+  "textarea",
+  "label",
+  "summary",
+  "details",
+  "[role='dialog']",
+  ".game-hand",
+  ".deal-log",
+  ".trick-dock",
+  ".corner-tools",
+  ".bullet-backdrop",
+].join(", ");
+
+// Клик по пустому месту во время паузы после взятки убирает её со стола у этого игрока.
+export function emptyTableClick(
+  target: { closest(selector: string): unknown } | null,
+  held: boolean,
+): boolean {
+  return held && target !== null && target.closest(TABLE_CONTROLS) === null;
+}
+
+// Пока на столе прошлая взятка, чужие карты новой взятки не показываются.
+export function shownTrick(
+  held: GameSnapshot["currentTrick"] | null,
+  leadCard: Card | null,
+  currentTrick: GameSnapshot["currentTrick"],
+  seat: number,
+): GameSnapshot["currentTrick"] {
+  if (held !== null) return held;
+  if (leadCard !== null && currentTrick.length === 0) return [{ seat, card: leadCard }];
+  return currentTrick;
 }
 
 export type TrickPlace = "me" | "left" | "right";

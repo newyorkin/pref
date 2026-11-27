@@ -15,7 +15,13 @@ import { RulesDialog } from "./table-rules.js";
 import { SeatTriangle, downloadResults, resultsText } from "./table-score.js";
 import { DealLog, SpeechWord, speechEntries, wordsOnStep } from "./table-speech.js";
 import { Talon } from "./table-talon.js";
-import { CurrentTrick, finishedTrickDisplay, LastTrickCards } from "./table-trick.js";
+import {
+  CurrentTrick,
+  emptyTableClick,
+  finishedTrickDisplay,
+  LastTrickCards,
+  shownTrick,
+} from "./table-trick.js";
 import type {
   Card,
   GameAction,
@@ -402,12 +408,7 @@ export function GameSnapshotPanel({
   const leftSeat = (seat + 1) % 3;
   const rightSeat = (seat + 2) % 3;
   const hand = sortHand(state.hand, profile.handOrder, profile.suitOrder);
-  const tableTrick =
-    heldTrick !== null
-      ? heldTrick.cards
-      : leadCard !== null && state.currentTrick.length === 0
-        ? [{ seat, card: leadCard }]
-        : state.currentTrick;
+  const tableTrick = shownTrick(heldTrick?.cards ?? null, leadCard, state.currentTrick, seat);
   const dealer = dealerSeat(state.dealNumber);
   const gap = emptySeatMessage(occupiedSeats, state.auction.turn);
   const spoken = wordsOnStep(state.speech, state.speechStep);
@@ -428,6 +429,11 @@ export function GameSnapshotPanel({
         .join(" ")}
       data-card-face={profile.cardFace}
       style={cardScaleStyle(profile.cardScale)}
+      onClick={(event) => {
+        if (emptyTableClick(event.target as Element, heldTrick !== null)) {
+          setHeldTrick(null);
+        }
+      }}
     >
       {error === null ? null : (
         <p className="game-error" role="alert">
