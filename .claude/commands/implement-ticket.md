@@ -2,11 +2,11 @@
 
 You are implementing one ticket for the preferans game in this repo. A ticket is a GitHub issue in the repo's `origin`.
 
-## 1. Start from the latest `origin/main`
+## 1. Start from the latest `origin/master`
 
-- Run `git status`. If there are uncommitted changes or you're on a branch other than `main`, stop and tell the user.
+- Run `git status`. If there are uncommitted changes or you're on a branch other than `master`, stop and tell the user.
 - Run `git fetch origin`. Merges usually happen on GitHub, so local branches may be out of date.
-- Create the ticket branch from `origin/main`: `git switch -c claude/<issue number>-<short-slug> origin/main`, for example `claude/9-dim-unplayable-cards`. Then run `pnpm install`.
+- Create the ticket branch from `origin/master`: `git switch -c claude/<issue number>-<short-slug> origin/master`, for example `claude/9-dim-unplayable-cards`. Then run `pnpm install`.
 
 ## 2. Read the ticket
 
@@ -16,7 +16,7 @@ You are implementing one ticket for the preferans game in this repo. A ticket is
 
 ## 3. Check the ticket is still needed
 
-Tickets were written from chat feedback and may already be fixed on `origin/main`. Before writing any code, check each item in the "Что проверить и сделать" list against the current code, and reproduce the problem in the running app where you can. To reproduce it, use the screenshot tool as the checks under "Before you finish" describe, with `--out /tmp/pref-screenshots/<issue number>-before/`. `pnpm dev` doesn't work for the test table.
+Tickets were written from chat feedback and may already be fixed on `origin/master`. Before writing any code, check each item in the "Что проверить и сделать" list against the current code, and reproduce the problem in the running app where you can. To reproduce it, use the screenshot tool as the checks under "Before you finish" describe, with `--out /tmp/pref-screenshots/<issue number>-before/`. `pnpm dev` doesn't work for the test table.
 
 - If every item is already done, don't open a PR. Post a comment on the issue with `gh issue comment <number>` that lists each item with its evidence (the file and line or commit that handles it, the test that covers it, or what you saw when you reproduced it). Don't close the issue. Then stop, and reply with the issue link and a note that the ticket is already fixed.
 - If only some items are done, implement the rest, and list the done items with their evidence in the PR description under `### Acceptance criteria`.
@@ -43,7 +43,7 @@ Implement each remaining item in the "Что проверить и сделат�
    - For visible changes, take screenshots of the fix on the local test table with `.claude/tools/screenshot.mjs`. The comment at the top of that file explains how to start the server and write a scenario. Use `pnpm --filter @pref/web build` and the server start command it gives, not `pnpm dev`. Write the scenario to `/tmp/pref-scenarios/<issue number>.mjs`, outside the repo. Before the run whose screenshots you'll publish, delete `/tmp/pref-screenshots/<issue number>/` so no old screenshots are left there. Then run `node .claude/tools/screenshot.mjs /tmp/pref-scenarios/<issue number>.mjs --out /tmp/pref-screenshots/<issue number>/`. Take one screenshot for each state the ticket's checklist names, from each player's view where it differs. Look at every screenshot yourself, and describe what each one shows under `### Testing`. If you can't take a screenshot, list the visual check under `### Not verified`, with the reason. When you're done, stop the app server on port 3001. Leave the `pref-playwright` Docker container running for the next run.
 2. Commit on the ticket branch.
 3. Push the branch with `git push -u origin <branch>`.
-4. Open a pull request into `main` with `gh pr create`. Don't merge it. Write the PR in English, and put `Closes #<issue number>` at the end of the description so that merging closes the issue.
+4. Open a pull request into `master` with `gh pr create`. Don't merge it. Write the PR in English, and put `Closes #<issue number>` at the end of the description so that merging closes the issue.
    - Title: `<issue number>: <issue title without the [P…] prefix>`, for example `9: Затемнять карты, которыми нельзя ходить`.
    - Description, with these sections (leave out any that would be empty):
      - `## <issue number>: <issue title without the [P…] prefix>`, then one or two sentences on what the PR does
