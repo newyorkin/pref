@@ -13,6 +13,7 @@
   --trick-h: min(calc(4.8rem * var(--card-scale, 1)), max(2.6rem, calc((100dvh - var(--table-foot) - 18rem) / 4)));
   --trick-w: calc(var(--trick-h) * 0.70833333);
   --trick-gap: 0.7rem;
+  --trick-dock-w: min(16.5rem, calc(100vw - 12rem));
   box-sizing: border-box;
   min-height: 100dvh;
   display: flex;
@@ -1091,17 +1092,36 @@ section.trick.trick-play {
   margin-left: calc(var(--trick-w) / -2);
 }
 
-.trick.trick-with-talon {
-  gap: 0.35rem;
+/* Последняя взятка, by seat like the current trick: left and right on top, own card at the
+   bottom, and the raspas talon card on top between them. */
+.trick.trick-last {
+  display: grid;
+  grid-template-columns: repeat(3, auto);
+  grid-template-areas:
+    "left talon right"
+    ". me .";
+  gap: 0.3rem 0.35rem;
 }
 
-.trick.trick-with-talon .pc {
+.trick.trick-last .pc {
   width: 2.7rem;
   height: 3.8rem;
 }
 
-.trick.trick-with-talon .pc-talon {
-  margin-right: 0.25rem;
+.trick-last .trick-at-left {
+  grid-area: left;
+}
+
+.trick-last .trick-at-right {
+  grid-area: right;
+}
+
+.trick-last .trick-at-me {
+  grid-area: me;
+}
+
+.trick-last .trick-at-talon {
+  grid-area: talon;
 }
 
 .discard-pile .trick .pc {
@@ -1128,7 +1148,7 @@ section.trick.trick-play {
   flex-direction: column;
   align-items: center;
   gap: 0.2rem;
-  width: min(16.5rem, calc(100vw - 12rem));
+  width: var(--trick-dock-w);
   pointer-events: none;
 }
 
@@ -1228,6 +1248,14 @@ section.trick.trick-play {
 /* «Ваш ход» moves up with the triangle, so it doesn't cover the right corner's name. */
 .game-own-contract .turn-indicator {
   bottom: calc(var(--table-foot) + 0.5rem + var(--own-contract-lift));
+}
+
+/* The open «Последняя взятка» fills the dock up to the hand, so «Ваш ход» moves to its left.
+   On a phone the лог sits there instead. */
+@media (min-width: 641px) {
+  .game-screen:has(.last-trick[open]) .turn-indicator {
+    right: calc(var(--trick-dock-w) + 1.25rem);
+  }
 }
 
 .seat-corner > span > .contract-badge {
@@ -1897,7 +1925,7 @@ section.trick.trick-play {
     height: var(--trick-h);
   }
 
-  .trick.trick-with-talon .pc {
+  .trick.trick-last .pc {
     width: calc(2.7rem * var(--card-scale, 1));
     height: calc(3.8rem * var(--card-scale, 1));
   }

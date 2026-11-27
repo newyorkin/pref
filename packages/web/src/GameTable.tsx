@@ -15,7 +15,7 @@ import { RulesDialog } from "./table-rules.js";
 import { SeatTriangle, downloadResults, resultsText } from "./table-score.js";
 import { DealLog, SpeechWord, speechEntries, wordsOnStep } from "./table-speech.js";
 import { Talon } from "./table-talon.js";
-import { CurrentTrick, finishedTrickDisplay } from "./table-trick.js";
+import { CurrentTrick, finishedTrickDisplay, LastTrickCards } from "./table-trick.js";
 import type {
   Card,
   GameAction,
@@ -561,22 +561,7 @@ export function GameSnapshotPanel({
         {lastTrick === undefined ? null : (
           <details className="last-trick">
             <summary>Последняя взятка</summary>
-            <div
-              className={
-                lastTrick.talonCard === undefined ? "trick" : "trick trick-with-talon"
-              }
-            >
-              {lastTrick.talonCard === undefined ? null : (
-                <PlayingCard card={lastTrick.talonCard} talon />
-              )}
-              {lastTrick.cards.map((played) => (
-                <PlayingCard
-                  key={played.seat}
-                  card={played.card}
-                  trump={trump === played.card.suit}
-                />
-              ))}
-            </div>
+            <LastTrickCards trick={lastTrick} trump={trump} viewer={seat} />
             <p className="trick-count">
               {lastTrick.winner === seat
                 ? "Взятку взяли вы"

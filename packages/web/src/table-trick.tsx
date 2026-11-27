@@ -8,6 +8,13 @@ export function finishedTrickDisplay(previous: GameSnapshot, next: GameSnapshot)
   return cards === null ? null : { cards, prikup: previous.prikup ?? [] };
 }
 
+export type TrickPlace = "me" | "left" | "right";
+
+export function trickPlace(seat: number, viewer: number): TrickPlace {
+  const relativeSeat = (seat - viewer + 3) % 3;
+  return relativeSeat === 0 ? "me" : relativeSeat === 1 ? "left" : "right";
+}
+
 export function CurrentTrick({
   tableTrick,
   trump,
@@ -23,9 +30,7 @@ export function CurrentTrick({
       {tableTrick.length === 0 ? null : (
         <section className="trick trick-play" aria-label="Текущая взятка">
           {tableTrick.map((played) => {
-            const relativeSeat = (played.seat - viewer + 3) % 3;
-            const position =
-              relativeSeat === 0 ? "me" : relativeSeat === 1 ? "left" : "right";
+            const position = trickPlace(played.seat, viewer);
             return "faceDown" in played.card ? (
               <span
                 key={played.seat}
@@ -44,5 +49,31 @@ export function CurrentTrick({
         </section>
       )}
     </>
+  );
+}
+
+export function LastTrickCards({
+  trick,
+  trump,
+  viewer,
+}: {
+  trick: GameSnapshot["trickHistory"][number];
+  trump: string | null;
+  viewer: number;
+}) {
+  return (
+    <div className="trick trick-last">
+      {trick.talonCard === undefined ? null : (
+        <PlayingCard card={trick.talonCard} talon placeClass="trick-at-talon" />
+      )}
+      {trick.cards.map((played) => (
+        <PlayingCard
+          key={played.seat}
+          card={played.card}
+          trump={trump === played.card.suit}
+          placeClass={`trick-at-${trickPlace(played.seat, viewer)}`}
+        />
+      ))}
+    </div>
   );
 }
