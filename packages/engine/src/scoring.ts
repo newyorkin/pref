@@ -290,11 +290,14 @@ function awardBullet(
   if (remaining <= 0) {
     return;
   }
-  if (next.mountain[earner] >= remaining) {
-    next.mountain[earner] -= remaining;
+  // All пули are full: the rest comes off the earner's гора first, and only what
+  // the гора can't take is written into the others' гора.
+  const writtenOff = Math.min(remaining, Math.max(0, next.mountain[earner]));
+  next.mountain[earner] -= writtenOff;
+  remaining -= writtenOff;
+  if (remaining <= 0) {
     return;
   }
-  next.mountain[earner] = 0;
   for (const seat of SEATS) {
     if (seat !== earner) {
       next.mountain[seat] += remaining;

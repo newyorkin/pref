@@ -511,7 +511,7 @@ describe("last deal's entries on the bullet sheet", () => {
       noWhist(0),
       // All three пули are full: the viewer's own гора goes down.
       noWhist(0),
-      // More than the гора holds: it goes to 0 and the others get the overflow in their гора, as the engine scores it.
+      // More than the гора holds: it goes to 0 and the others write only the part it couldn't take.
       noWhist(0, 10),
     ];
     const at = (count: number) => {
@@ -519,7 +519,7 @@ describe("last deal's entries on the bullet sheet", () => {
       return entries(sheet(score, deals, 0, 4));
     };
     expect(at(8)).toEqual(["2. 4 >>", "2. 4 >>", "10.[8]", "2. 4 >>"]);
-    expect(at(9)).toEqual(["[10]", "2. 4 >>", "[10]", "2. 4 >>", "10.8.[0]", "2. 4 >>"]);
+    expect(at(9)).toEqual(["[2]", "2. 4 >>", "[2]", "2. 4 >>", "10.8.[0]", "2. 4 >>"]);
   });
 
   test("highlights the прикуп's entries as soon as the next deal writes them", () => {
