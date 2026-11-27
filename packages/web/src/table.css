@@ -1093,7 +1093,7 @@ section.trick.trick-play {
 }
 
 /* Последняя взятка, by seat like the current trick: left and right on top, own card at the
-   bottom, and the raspas talon card on top between them. */
+   bottom, and the распасы прикуп card on top between them. */
 .trick.trick-last {
   display: grid;
   grid-template-columns: repeat(3, auto);

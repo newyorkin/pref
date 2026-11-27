@@ -187,7 +187,7 @@ describe("last trick by seat", () => {
     expect(markup).not.toContain("trick-at-talon");
   });
 
-  test.each([0, 1, 2])("puts the raspas talon card on top for seat %i", (viewer) => {
+  test.each([0, 1, 2])("puts the распасы прикуп card on top for seat %i", (viewer) => {
     const trick = { winner: 0, talonCard: { suit: "clubs", rank: 14 }, cards };
     const markup = renderToStaticMarkup(
       <LastTrickCards trick={trick} trump={null} viewer={viewer} />,
