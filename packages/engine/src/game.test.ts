@@ -2268,7 +2268,7 @@ describe("complete game state", () => {
       gameView(state, 0).allowedActions.flatMap((action) =>
         action.type === "propose" ? [action.tricks] : [],
       ),
-    ).toEqual([3, 4, 5, 6, 7, 8, 9, 10]);
+    ).toEqual([3, 4, 5, 6, 7, 8, 9]);
     const early = applyGameAction(state, 0, { type: "propose", tricks: 2 });
     expect(early.accepted).toBe(false);
     expect(early.reason).toBe("invalidProposal");

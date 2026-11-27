@@ -41,6 +41,28 @@ export function proposalSeat(state: GameState, seat: Seat): boolean {
   );
 }
 
+function proposalBounds(state: GameState): { floor: number; ceiling: number } | null {
+  const result = state.auctionResult;
+  if (state.play === null || result == null || result.type === "raspas") return null;
+  const floor = state.play.tricksWon[result.declarer];
+  const takenByOthers = state.play.tricksWon.reduce(
+    (sum, tricks, seat) => sum + (seat === result.declarer ? 0 : tricks),
+    0,
+  );
+  // A partial current trick is still one of the unresolved tricks, not a taken one.
+  return { floor, ceiling: 10 - takenByOthers };
+}
+
+function validProposal(state: GameState, tricks: number): boolean {
+  const bounds = proposalBounds(state);
+  return (
+    bounds !== null &&
+    Number.isInteger(tricks) &&
+    tricks >= bounds.floor &&
+    tricks <= bounds.ceiling
+  );
+}
+
 export function proposalOffers(state: GameState, seat: Seat): readonly GameAction[] {
   if (
     !proposalAvailable(state) ||
@@ -52,12 +74,10 @@ export function proposalOffers(state: GameState, seat: Seat): readonly GameActio
   if (!proposalSeat(state, seat) || state.play === null) {
     return [];
   }
+  const bounds = proposalBounds(state);
+  if (bounds === null) return [];
   const offers: GameAction[] = [];
-  const floor =
-    state.auctionResult.type === "misere"
-      ? 0
-      : state.play.tricksWon[state.auctionResult.declarer];
-  for (let tricks = floor; tricks <= 10; tricks += 1) {
+  for (let tricks = bounds.floor; tricks <= bounds.ceiling; tricks += 1) {
     offers.push({ type: "propose", tricks });
   }
   return offers;
@@ -96,11 +116,7 @@ export function offerProposal(
   if (!proposalSeat(state, seat)) {
     return reject(state, "notYourTurn");
   }
-  const floor =
-    state.auctionResult.type === "misere"
-      ? 0
-      : (state.play?.tricksWon[state.auctionResult.declarer] ?? 0);
-  if (!Number.isInteger(tricks) || tricks < floor || tricks > 10) {
+  if (!validProposal(state, tricks)) {
     return reject(state, "invalidProposal");
   }
   const byDeclarer = state.auctionResult.declarer === seat;
@@ -155,6 +171,8 @@ export function answerProposal(
       proposal: null,
     });
   }
+  // A saved offer from an older server must not rewrite already taken tricks either.
+  if (!validProposal(state, proposal.tricks)) return reject(state, "invalidProposal");
   const answers: Proposal["answers"] = [
     seat === 0 ? "agree" : proposal.answers[0],
     seat === 1 ? "agree" : proposal.answers[1],
@@ -197,15 +215,12 @@ export function finishProposal(state: GameState, dealSource?: () => Deal): GameS
   ) {
     throw new Error("Cannot record a proposal");
   }
-  const tricks = [0, 0, 0] as [number, number, number];
+  const tricks = [...state.play.tricksWon] as [number, number, number];
   const declarer = auctionResult.declarer;
   tricks[declarer] = proposal.tricks;
-  const remainingTricks = 10 - proposal.tricks;
-  if (whistler !== undefined) {
-    tricks[whistler] = remainingTricks;
-  } else {
-    tricks[((declarer + 1) % 3) as Seat] = remainingTricks;
-  }
+  const remainingTricks = 10 - tricks.reduce((sum, taken) => sum + taken, 0);
+  const recipient = whistler ?? (((declarer + 1) % 3) as Seat);
+  tricks[recipient] += remainingTricks;
   const passer = state.defense?.defenders.find(
     (defender) => state.defense?.decisions[defender] === "pass",
   );
